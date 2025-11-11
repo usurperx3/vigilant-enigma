@@ -1,0 +1,5234 @@
+Here is an entire script export from Roblox. Your task is to help me code this roblox game. Please analyze the export below and create the pertinent files:
+
+-- Script: Workspace>Humanoid>Animate
+function   waitForChild(parent, childName)
+	local child = parent:findFirstChild(childName)
+	if child then return child end
+	while true do
+		child = parent.ChildAdded:wait()
+		if child.Name==childName then return child end
+	end
+end
+
+local Figure = script.Parent
+local Torso = waitForChild(Figure, "Torso")
+local RightShoulder = waitForChild(Torso, "Right Shoulder")
+local LeftShoulder = waitForChild(Torso, "Left Shoulder")
+local RightHip = waitForChild(Torso, "Right Hip")
+local LeftHip = waitForChild(Torso, "Left Hip")
+local Neck = waitForChild(Torso, "Neck")
+local Humanoid = waitForChild(Figure, "Humanoid")
+local pose = "Standing"
+
+local currentAnim = ""
+local currentAnimTrack = nil
+local currentAnimKeyframeHandler = nil
+local currentAnimSpeed = 1.0
+local animTable = {}
+local animNames = { 
+	idle = 	{	
+				{ id = "http://www.roblox.com/asset/?id=125750544", weight = 9 },
+				{ id = "http://www.roblox.com/asset/?id=125750618", weight = 1 }
+			},
+	walk = 	{ 	
+				{ id = "http://www.roblox.com/asset/?id=125749145", weight = 10 } 
+			}, 
+	run = 	{
+				{ id = "run.xml", weight = 10 } 
+			}, 
+	jump = 	{
+				{ id = "http://www.roblox.com/asset/?id=125750702", weight = 10 } 
+			}, 
+	fall = 	{
+				{ id = "http://www.roblox.com/asset/?id=125750759", weight = 10 } 
+			}, 
+	climb = {
+				{ id = "http://www.roblox.com/asset/?id=125750800", weight = 10 } 
+			}, 
+	toolnone = {
+				{ id = "http://www.roblox.com/asset/?id=125750867", weight = 10 } 
+			},
+	toolslash = {
+				{ id = "http://www.roblox.com/asset/?id=129967390", weight = 10 } 
+--				{ id = "slash.xml", weight = 10 } 
+			},
+	toollunge = {
+				{ id = "http://www.roblox.com/asset/?id=129967478", weight = 10 } 
+			},
+	wave = {
+				{ id = "http://www.roblox.com/asset/?id=128777973", weight = 10 } 
+			},
+	point = {
+				{ id = "http://www.roblox.com/asset/?id=128853357", weight = 10 } 
+			},
+	dance = {
+				{ id = "http://www.roblox.com/asset/?id=130018893", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=132546839", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=132546884", weight = 10 } 
+			},
+	dance2 = {
+				{ id = "http://www.roblox.com/asset/?id=160934142", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934298", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934376", weight = 10 } 
+			},
+	dance3 = {
+				{ id = "http://www.roblox.com/asset/?id=160934458", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934530", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934593", weight = 10 } 
+			},
+	laugh = {
+				{ id = "http://www.roblox.com/asset/?id=129423131", weight = 10 } 
+			},
+	cheer = {
+				{ id = "http://www.roblox.com/asset/?id=129423030", weight = 10 } 
+			},
+}
+
+-- Existance in this list signifies that it is an emote, the value indicates if it is a looping emote
+local emoteNames = { wave = false, point = false, dance = true, dance2 = true, dance3 = true, laugh = false, cheer = false}
+
+math.randomseed(tick())
+
+function configureAnimationSet(name, fileList)
+	if (animTable[name] ~= nil) then
+		for _, connection in pairs(animTable[name].connections) do
+			connection:disconnect()
+		end
+	end
+	animTable[name] = {}
+	animTable[name].count = 0
+	animTable[name].totalWeight = 0	
+	animTable[name].connections = {}
+
+	-- check for config values
+	local config = script:FindFirstChild(name)
+	if (config ~= nil) then
+--		print("Loading anims " .. name)
+		table.insert(animTable[name].connections, config.ChildAdded:connect(function(child) configureAnimationSet(name, fileList) end))
+		table.insert(animTable[name].connections, config.ChildRemoved:connect(function(child) configureAnimationSet(name, fileList) end))
+		local idx = 1
+		for _, childPart in pairs(config:GetChildren()) do
+			if (childPart:IsA("Animation")) then
+				table.insert(animTable[name].connections, childPart.Changed:connect(function(property) configureAnimationSet(name, fileList) end))
+				animTable[name][idx] = {}
+				animTable[name][idx].anim = childPart
+				local weightObject = childPart:FindFirstChild("Weight")
+				if (weightObject == nil) then
+					animTable[name][idx].weight = 1
+				else
+					animTable[name][idx].weight = weightObject.Value
+				end
+				animTable[name].count = animTable[name].count + 1
+				animTable[name].totalWeight = animTable[name].totalWeight + animTable[name][idx].weight
+	--			print(name .. " [" .. idx .. "] " .. animTable[name][idx].anim.AnimationId .. " (" .. animTable[name][idx].weight .. ")")
+				idx = idx + 1
+			end
+		end
+	end
+
+	-- fallback to defaults
+	if (animTable[name].count <= 0) then
+		for idx, anim in pairs(fileList) do
+			animTable[name][idx] = {}
+			animTable[name][idx].anim = Instance.new("Animation")
+			animTable[name][idx].anim.Name = name
+			animTable[name][idx].anim.AnimationId = anim.id
+			animTable[name][idx].weight = anim.weight
+			animTable[name].count = animTable[name].count + 1
+			animTable[name].totalWeight = animTable[name].totalWeight + anim.weight
+--			print(name .. " [" .. idx .. "] " .. anim.id .. " (" .. anim.weight .. ")")
+		end
+	end
+end
+
+-- Setup animation objects
+function scriptChildModified(child)
+	local fileList = animNames[child.Name]
+	if (fileList ~= nil) then
+		configureAnimationSet(child.Name, fileList)
+	end	
+end
+
+script.ChildAdded:connect(scriptChildModified)
+script.ChildRemoved:connect(scriptChildModified)
+
+
+for name, fileList in pairs(animNames) do 
+	configureAnimationSet(name, fileList)
+end	
+
+-- ANIMATION
+
+-- declarations
+local toolAnim = "None"
+local toolAnimTime = 0
+
+local jumpAnimTime = 0
+local jumpAnimDuration = 0.3
+
+local toolTransitionTime = 0.1
+local fallTransitionTime = 0.3
+local jumpMaxLimbVelocity = 0.75
+
+-- functions
+
+function stopAllAnimations()
+	local oldAnim = currentAnim
+
+	-- return to idle if finishing an emote
+	if (emoteNames[oldAnim] ~= nil and emoteNames[oldAnim] == false) then
+		oldAnim = "idle"
+	end
+
+	currentAnim = ""
+	if (currentAnimKeyframeHandler ~= nil) then
+		currentAnimKeyframeHandler:disconnect()
+	end
+
+	if (currentAnimTrack ~= nil) then
+		currentAnimTrack:Stop()
+		currentAnimTrack:Destroy()
+		currentAnimTrack = nil
+	end
+	return oldAnim
+end
+
+function setAnimationSpeed(speed)
+	if speed ~= currentAnimSpeed then
+		currentAnimSpeed = speed
+		currentAnimTrack:AdjustSpeed(currentAnimSpeed)
+	end
+end
+
+function keyFrameReachedFunc(frameName)
+	if (frameName == "End") then
+--		print("Keyframe : ".. frameName)
+		local repeatAnim = stopAllAnimations()
+		local animSpeed = currentAnimSpeed
+		playAnimation(repeatAnim, 0.0, Humanoid)
+		setAnimationSpeed(animSpeed)
+	end
+end
+
+-- Preload animations
+function playAnimation(animName, transitionTime, humanoid)
+	local idleFromEmote = (animName == "idle" and emoteNames[currentAnim] ~= nil)
+	if (animName ~= currentAnim and not idleFromEmote) then		 
+		
+		if (currentAnimTrack ~= nil) then
+			currentAnimTrack:Stop(transitionTime)
+			currentAnimTrack:Destroy()
+		end
+
+		currentAnimSpeed = 1.0
+		local roll = math.random(1, animTable[animName].totalWeight) 
+		local origRoll = roll
+		local idx = 1
+		while (roll > animTable[animName][idx].weight) do
+			roll = roll - animTable[animName][idx].weight
+			idx = idx + 1
+		end
+--		print(animName .. " " .. idx .. " [" .. origRoll .. "]")
+		local anim = animTable[animName][idx].anim
+
+		-- load it to the humanoid; get AnimationTrack
+		currentAnimTrack = humanoid:LoadAnimation(anim)
+		 
+		-- play the animation
+		currentAnimTrack:Play(transitionTime)
+		currentAnim = animName
+
+		-- set up keyframe name triggers
+		if (currentAnimKeyframeHandler ~= nil) then
+			currentAnimKeyframeHandler:disconnect()
+		end
+		currentAnimKeyframeHandler = currentAnimTrack.KeyframeReached:connect(keyFrameReachedFunc)
+	end
+end
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+local toolAnimName = ""
+local toolAnimTrack = nil
+local currentToolAnimKeyframeHandler = nil
+
+function toolKeyFrameReachedFunc(frameName)
+	if (frameName == "End") then
+--		print("Keyframe : ".. frameName)
+		local repeatAnim = stopToolAnimations()
+		playToolAnimation(repeatAnim, 0.0, Humanoid)
+	end
+end
+
+
+function playToolAnimation(animName, transitionTime, humanoid)
+	if (animName ~= toolAnimName) then		 
+		
+		if (toolAnimTrack ~= nil) then
+			toolAnimTrack:Stop()
+			toolAnimTrack:Destroy()
+			transitionTime = 0
+		end
+
+		local roll = math.random(1, animTable[animName].totalWeight) 
+		local origRoll = roll
+		local idx = 1
+		while (roll > animTable[animName][idx].weight) do
+			roll = roll - animTable[animName][idx].weight
+			idx = idx + 1
+		end
+--		print(animName .. " * " .. idx .. " [" .. origRoll .. "]")
+		local anim = animTable[animName][idx].anim
+
+		-- load it to the humanoid; get AnimationTrack
+		toolAnimTrack = humanoid:LoadAnimation(anim)
+		 
+		-- play the animation
+		toolAnimTrack:Play(transitionTime)
+		toolAnimName = animName
+
+		currentToolAnimKeyframeHandler = toolAnimTrack.KeyframeReached:connect(toolKeyFrameReachedFunc)
+	end
+end
+
+function stopToolAnimations()
+	local oldAnim = toolAnimName
+
+	if (currentToolAnimKeyframeHandler ~= nil) then
+		currentToolAnimKeyframeHandler:disconnect()
+	end
+
+	toolAnimName = ""
+	if (toolAnimTrack ~= nil) then
+		toolAnimTrack:Stop()
+		toolAnimTrack:Destroy()
+		toolAnimTrack = nil
+	end
+
+
+	return oldAnim
+end
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+
+function onRunning(speed)
+	if speed>0.01 then
+		playAnimation("walk", 0.1, Humanoid)
+		pose = "Running"
+	else
+		playAnimation("idle", 0.1, Humanoid)
+		pose = "Standing"
+	end
+end
+
+function onDied()
+	pose = "Dead"
+end
+
+function onJumping()
+	playAnimation("jump", 0.1, Humanoid)
+	jumpAnimTime = jumpAnimDuration
+	pose = "Jumping"
+end
+
+function onClimbing(speed)
+	playAnimation("climb", 0.1, Humanoid)
+	setAnimationSpeed(speed / 12.0)
+	pose = "Climbing"
+end
+
+function onGettingUp()
+	pose = "GettingUp"
+end
+
+function onFreeFall()
+	if (jumpAnimTime <= 0) then
+		playAnimation("fall", fallTransitionTime, Humanoid)
+	end
+	pose = "FreeFall"
+end
+
+function onFallingDown()
+	pose = "FallingDown"
+end
+
+function onSeated()
+	pose = "Seated"
+end
+
+function onPlatformStanding()
+	pose = "PlatformStanding"
+end
+
+function onSwimming(speed)
+	if speed>0 then
+		pose = "Running"
+	else
+		pose = "Standing"
+	end
+end
+
+function getTool()	
+	for _, kid in ipairs(Figure:GetChildren()) do
+		if kid.className == "Tool" then return kid end
+	end
+	return nil
+end
+
+function getToolAnim(tool)
+	for _, c in ipairs(tool:GetChildren()) do
+		if c.Name == "toolanim" and c.className == "StringValue" then
+			return c
+		end
+	end
+	return nil
+end
+
+function animateTool()
+	
+	if (toolAnim == "None") then
+		playToolAnimation("toolnone", toolTransitionTime, Humanoid)
+		return
+	end
+
+	if (toolAnim == "Slash") then
+		playToolAnimation("toolslash", 0, Humanoid)
+		return
+	end
+
+	if (toolAnim == "Lunge") then
+		playToolAnimation("toollunge", 0, Humanoid)
+		return
+	end
+end
+
+function moveSit()
+	RightShoulder.MaxVelocity = 0.15
+	LeftShoulder.MaxVelocity = 0.15
+	RightShoulder:SetDesiredAngle(3.14 /2)
+	LeftShoulder:SetDesiredAngle(-3.14 /2)
+	RightHip:SetDesiredAngle(3.14 /2)
+	LeftHip:SetDesiredAngle(-3.14 /2)
+end
+
+local lastTick = 0
+
+function move(time)
+	local amplitude = 1
+	local frequency = 1
+  	local deltaTime = time - lastTick
+  	lastTick = time
+
+	local climbFudge = 0
+	local setAngles = false
+
+  	if (jumpAnimTime > 0) then
+  		jumpAnimTime = jumpAnimTime - deltaTime
+  	end
+
+	if (pose == "FreeFall" and jumpAnimTime <= 0) then
+		playAnimation("fall", fallTransitionTime, Humanoid)
+	elseif (pose == "Seated") then
+		stopAllAnimations()
+		moveSit()
+		return
+	elseif (pose == "Running") then
+		playAnimation("walk", 0.1, Humanoid)
+	elseif (pose == "Dead" or pose == "GettingUp" or pose == "FallingDown" or pose == "Seated" or pose == "PlatformStanding") then
+--		print("Wha " .. pose)
+		amplitude = 0.1
+		frequency = 1
+		setAngles = true
+	end
+
+	if (setAngles) then
+		desiredAngle = amplitude * math.sin(time * frequency)
+
+		RightShoulder:SetDesiredAngle(desiredAngle + climbFudge)
+		LeftShoulder:SetDesiredAngle(desiredAngle - climbFudge)
+		RightHip:SetDesiredAngle(-desiredAngle)
+		LeftHip:SetDesiredAngle(-desiredAngle)
+	end
+
+	-- Tool Animation handling
+	local tool = getTool()
+	if tool then
+	
+		animStringValueObject = getToolAnim(tool)
+
+		if animStringValueObject then
+			toolAnim = animStringValueObject.Value
+			-- message recieved, delete StringValue
+			animStringValueObject.Parent = nil
+			toolAnimTime = time + .3
+		end
+
+		if time > toolAnimTime then
+			toolAnimTime = 0
+			toolAnim = "None"
+		end
+
+		animateTool()		
+	else
+		stopToolAnimations()
+		toolAnim = "None"
+		toolAnimTime = 0
+	end
+end
+
+-- connect events
+Humanoid.Died:connect(onDied)
+Humanoid.Running:connect(onRunning)
+Humanoid.Jumping:connect(onJumping)
+Humanoid.Climbing:connect(onClimbing)
+Humanoid.GettingUp:connect(onGettingUp)
+Humanoid.FreeFalling:connect(onFreeFall)
+Humanoid.FallingDown:connect(onFallingDown)
+Humanoid.Seated:connect(onSeated)
+Humanoid.PlatformStanding:connect(onPlatformStanding)
+Humanoid.Swimming:connect(onSwimming)
+
+-- main program
+
+local runService = game:service("RunService");
+
+-- initialize to idle
+playAnimation("idle", 0.1, Humanoid)
+pose = "Standing"
+
+while Figure.Parent~=nil do
+	local _, time = wait(0.1)
+	move(time)
+end
+
+
+
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_AIUtilities
+local utility = {}
+
+function utility:WideRayCast(start, target, offset, ignoreList)
+	local parts = {}
+	
+	local ray = Ray.new(start, target - start)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	local offsetVector = offset * (target - start):Cross(Vector3.FromNormalId(Enum.NormalId.Top)).unit
+	local ray = Ray.new(start + offsetVector, target - start + offsetVector)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	local ray = Ray.new(start - offsetVector, target - start - offsetVector)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	return parts
+end
+
+function utility:FindNearestPathPoint(path, point, start, target, ignoreList)
+	local occludePoint = path:CheckOcclusionAsync(point)
+	if occludePoint > 0 then
+		utility:WideRayCast(start)
+	end
+end
+
+local maxForce = 75
+
+function utility:GetRepulsionVector(unitPosition, otherUnitsPositions)
+	local repulsionVector = Vector3.new(0,0,0)
+	local count = 0
+	for _, other in pairs(otherUnitsPositions) do
+		local fromOther = unitPosition - other 
+		--fromOther = fromOther.unit * ((-maxForce / 5) * math.pow(fromOther.magnitude,2) + maxForce)
+		fromOther = fromOther.unit * 1000 / math.pow((fromOther.magnitude + 1), 2)
+		repulsionVector = repulsionVector + fromOther
+	end
+	return repulsionVector * maxForce
+end
+
+function utility:GetIdleState(StateMachine)
+	local IdleState = StateMachine.NewState()
+	IdleState.Name = "Idle"
+	IdleState.Action = function() end
+	IdleState.Init = function() end
+	return IdleState
+end
+
+function utility:GetClosestVisibleTarget(npcModel, characters, ignoreList, fieldOfView)
+	local closestTarget = nil
+	local closestDistance = math.huge
+	for _, character in pairs(characters) do
+		local toTarget = character.Torso.Position - npcModel.Torso.Position
+		local toTargetWedge = toTarget * Vector3.new(1,0,1)
+		local angle = math.acos(toTargetWedge:Dot(npcModel.Torso.CFrame.lookVector)/toTargetWedge.magnitude)
+		if math.deg(angle) < fieldOfView then
+			local targetRay = Ray.new(npcModel.Torso.Position, toTarget)
+			local part, position = game.Workspace:FindPartOnRayWithIgnoreList(targetRay, ignoreList)
+			if part and part.Parent == character then
+				if toTarget.magnitude < closestDistance then
+					closestTarget = character
+					closestDistance = toTarget.magnitude
+				end
+			end
+		end
+	end
+	return closestTarget
+end
+
+local function isSpaceEmpty(position)
+	local region = Region3.new(position - Vector3.new(2,2,2), position + Vector3.new(2,2,2))
+	return game.Workspace:IsRegion3Empty(region)
+end
+
+function utility:FindCloseEmptySpace(model)
+	local targetPos = Vector3.new(0,0,0)
+	local count = 0
+	math.randomseed(os.time())
+	repeat
+		local xoff = math.random(5,10)
+		if math.random() > .5 then
+			xoff = xoff * -1
+		end
+		local zoff = math.random(5, 10)
+		if math.random() > .5 then
+			zoff = zoff * -1
+		end
+		
+		targetPos = Vector3.new(model.Torso.Position.X + xoff,model.Torso.Position.Y,model.Torso.Position.Z + zoff)
+		if isSpaceEmpty(targetPos) then
+			return targetPos
+		else
+			targetPos = targetPos + Vector3.new(0,4,0)
+		end
+		
+		if isSpaceEmpty(targetPos) then
+			return targetPos
+		end
+		count = count + 1
+	until count > 10
+	return nil
+end
+
+return utility
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_DestroyService
+local destroyService = {}
+
+local destroyQueue = {}
+
+function destroyService:AddItem(theobject, delay)
+	local now = os.time()
+	local destroyObject = {object = theobject, destroyTime = delay + now}
+	for i, storedObject in pairs(destroyQueue) do
+		if destroyQueue[i].destroyTime > destroyObject.destroyTime then
+			table.insert(destroyQueue, i, destroyObject)
+			return true
+		end
+	end
+	table.insert(destroyQueue, destroyObject)
+	return true
+end
+
+local updateThread = coroutine.create(function()
+	while true do 
+		local now = os.time()
+		for _, storedObject in pairs(destroyQueue) do
+			if now >= storedObject.destroyTime then
+				table.remove(destroyQueue, 1)
+				if storedObject.object then
+					storedObject.object:Destroy()
+				end
+			elseif now >= storedObject.destroyTime - 1 then
+				
+				if storedObject.object and storedObject.object:IsA("Part") then
+					local trans = storedObject.object.Transparency + 1/30
+					storedObject.object.Transparency = trans
+				end
+			else 
+				break
+			end
+		end
+		wait()
+	end
+end)
+
+coroutine.resume(updateThread)
+
+return destroyService
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_HumanoidList
+local humanoidList = {}
+local storage = {}
+
+function humanoidList:GetCurrent()
+	return storage
+end
+
+local function findHumanoids(object, list)
+	if object then
+		if object:IsA("Humanoid") then
+			table.insert(list, object)
+		end
+
+		for _, child in pairs(object:GetChildren()) do
+			local childList = findHumanoids(child, list)
+		end
+	end
+end
+
+local updateThread = coroutine.create(function()
+	while true do
+		storage = {}
+		findHumanoids(game.Workspace, storage)
+		wait(3)
+	end
+end)
+
+coroutine.resume(updateThread)
+
+return humanoidList
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_StateMachine
+local machine = {}
+
+machine.new = function()
+	local StateMachine = {}	
+	
+	StateMachine.WaitTime = .2
+	StateMachine.CurrentState = nil
+	StateMachine.SwitchState = function(newState)
+		if StateMachine.CurrentState then
+			StateMachine.CurrentState.Stop()
+		end
+		StateMachine.CurrentState = newState
+		if newState then
+			newState.Start()
+		end
+	end
+	
+	StateMachine.NewState = function()
+		local state = {}
+		state.Name = ""
+		state.Conditions = {}
+		state.isRunning = false
+		state.Action = function() end
+		state.Run = function()
+			state.isRunning = true
+			while state.isRunning do
+				--check conditions
+				--print("checking conditions")
+				for _, condition in pairs(state.Conditions) do
+					--print("Checking " .. condition.Name)
+					if condition.Evaluate() then
+						--print(condition.Name .. " is true. Switching states")
+						StateMachine.SwitchState(condition.TransitionState)
+						return
+					end
+				end
+				
+				--if no conditions satisfied, perform action
+				state.Action()
+				wait(StateMachine.WaitTime)
+			end
+		end
+		state.Init = function()
+			
+		end
+		state.Start = function()
+			--print("Starting " .. state.Name)
+			state.Init()
+			local thread = coroutine.create(state.Run)
+			coroutine.resume(thread)
+		end
+		state.Stop = function()
+			--print("Stopping " .. state.Name)
+			state.isRunning = false
+		end
+		return state
+	end
+	
+	StateMachine.NewCondition = function()
+		local condition = {}
+		condition.Name = ""
+		condition.Evaluate = function() print("replace me") return false end
+		condition.TransitionState = {}
+		return condition
+	end	
+	
+	return StateMachine
+end
+
+return machine
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_PathfindingLibrary
+local PathfindingUtility = {}
+local TargetOffsetMax = 10--5
+local JumpThreshold = 1.5 --2.5
+local NextPointThreshold = 4
+local PathfindingService = game:GetService("PathfindingService")
+PathfindingService.EmptyCutoff = .3
+
+function PathfindingUtility.new()
+	local this = {}
+	
+	local currentTargetPos = nil	
+	local lastTargetPos = Vector3.new(math.huge, math.huge, math.huge)	
+	local path = nil
+	local currentPointIndex = 1	
+	
+	function this:MoveToTarget(character, target)
+		local targetOffset = (lastTargetPos - target).magnitude
+--
+--		local targetOffsetVector = (lastTargetPos - target)
+--		if targetOffsetVector.magnitude < math.huge then
+--			targetOffsetVector = (lastTargetPos - target) * Vector3.new(1,0,1)	
+--		end
+		if targetOffset > TargetOffsetMax then
+		--if targetOffsetVector.magnitude > TargetOffsetMax then
+			--print("moveto")
+			local startPoint = character.Torso.Position
+			local humanoidState = character.Humanoid:GetState()
+			if humanoidState == Enum.HumanoidStateType.Jumping or humanoidState == Enum.HumanoidStateType.Freefall then
+				--print("this")				
+				local ray = Ray.new(character.Torso.Position, Vector3.new(0, -100, 0))
+				local hitPart, hitPoint = game.Workspace:FindPartOnRay(ray, character)
+				if hitPart then
+					startPoint = hitPoint
+				end
+			end
+			--print("making new path")
+			local newTarget = target
+			local ray = Ray.new(target + Vector3.new(0,-3,0), Vector3.new(0, -100, 0))			
+			local hitPart, hitPoint = game.Workspace:FindPartOnRay(ray, character)
+			if hitPoint then
+				if (hitPoint - target).magnitude > 4 then
+					newTarget = newTarget * Vector3.new(1,0,1) + Vector3.new(0,3,0)
+				end
+			end	
+			
+			--local newTarget = Vector3.new(1,0,1) * target + Vector3.new(0, 2, 0)
+			path = PathfindingService:ComputeSmoothPathAsync(startPoint, newTarget, 500)
+			if path.Status ~= Enum.PathStatus.Success then
+				--print(tostring(path.Status))
+			end
+			--path = PathfindingService:ComputeRawPathAsync(startPoint, target, 500)			
+			
+--			game.Workspace.Points:ClearAllChildren()
+--			local ps = path:GetPointCoordinates()
+--			for _, point in pairs(ps) do
+--				local part = Instance.new("Part", game.Workspace.Points)
+--				part.CanCollide = false
+--				part.Anchored = true
+--				part.FormFactor = Enum.FormFactor.Custom
+--				part.Size = Vector3.new(1,1,1)
+--				part.Position = point
+--			end			
+			
+			currentPointIndex = 1
+			lastTargetPos = target
+		end
+		
+		if path then
+			local points = path:GetPointCoordinates()
+			if currentPointIndex < #points then
+				local currentPoint = points[currentPointIndex]
+				local distance = (character.Torso.Position - currentPoint).magnitude
+				if distance < NextPointThreshold then
+					currentPointIndex = currentPointIndex + 1
+				end
+				
+				character.Humanoid:MoveTo(points[currentPointIndex])
+				if points[currentPointIndex].Y - character.Torso.Position.Y > JumpThreshold then
+					character.Humanoid.Jump = true
+				end
+			else
+				character.Humanoid:MoveTo(target)
+			end
+		end
+	end
+	
+	return this
+end
+return PathfindingUtility 
+
+-- Script: Workspace>Humanoid>Animate
+function   waitForChild(parent, childName)
+	local child = parent:findFirstChild(childName)
+	if child then return child end
+	while true do
+		child = parent.ChildAdded:wait()
+		if child.Name==childName then return child end
+	end
+end
+
+local Figure = script.Parent
+local Torso = waitForChild(Figure, "Torso")
+local RightShoulder = waitForChild(Torso, "Right Shoulder")
+local LeftShoulder = waitForChild(Torso, "Left Shoulder")
+local RightHip = waitForChild(Torso, "Right Hip")
+local LeftHip = waitForChild(Torso, "Left Hip")
+local Neck = waitForChild(Torso, "Neck")
+local Humanoid = waitForChild(Figure, "Humanoid")
+local pose = "Standing"
+
+local currentAnim = ""
+local currentAnimTrack = nil
+local currentAnimKeyframeHandler = nil
+local currentAnimSpeed = 1.0
+local animTable = {}
+local animNames = { 
+	idle = 	{	
+				{ id = "http://www.roblox.com/asset/?id=125750544", weight = 9 },
+				{ id = "http://www.roblox.com/asset/?id=125750618", weight = 1 }
+			},
+	walk = 	{ 	
+				{ id = "http://www.roblox.com/asset/?id=125749145", weight = 10 } 
+			}, 
+	run = 	{
+				{ id = "run.xml", weight = 10 } 
+			}, 
+	jump = 	{
+				{ id = "http://www.roblox.com/asset/?id=125750702", weight = 10 } 
+			}, 
+	fall = 	{
+				{ id = "http://www.roblox.com/asset/?id=125750759", weight = 10 } 
+			}, 
+	climb = {
+				{ id = "http://www.roblox.com/asset/?id=125750800", weight = 10 } 
+			}, 
+	toolnone = {
+				{ id = "http://www.roblox.com/asset/?id=125750867", weight = 10 } 
+			},
+	toolslash = {
+				{ id = "http://www.roblox.com/asset/?id=129967390", weight = 10 } 
+--				{ id = "slash.xml", weight = 10 } 
+			},
+	toollunge = {
+				{ id = "http://www.roblox.com/asset/?id=129967478", weight = 10 } 
+			},
+	wave = {
+				{ id = "http://www.roblox.com/asset/?id=128777973", weight = 10 } 
+			},
+	point = {
+				{ id = "http://www.roblox.com/asset/?id=128853357", weight = 10 } 
+			},
+	dance = {
+				{ id = "http://www.roblox.com/asset/?id=130018893", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=132546839", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=132546884", weight = 10 } 
+			},
+	dance2 = {
+				{ id = "http://www.roblox.com/asset/?id=160934142", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934298", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934376", weight = 10 } 
+			},
+	dance3 = {
+				{ id = "http://www.roblox.com/asset/?id=160934458", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934530", weight = 10 }, 
+				{ id = "http://www.roblox.com/asset/?id=160934593", weight = 10 } 
+			},
+	laugh = {
+				{ id = "http://www.roblox.com/asset/?id=129423131", weight = 10 } 
+			},
+	cheer = {
+				{ id = "http://www.roblox.com/asset/?id=129423030", weight = 10 } 
+			},
+}
+
+-- Existance in this list signifies that it is an emote, the value indicates if it is a looping emote
+local emoteNames = { wave = false, point = false, dance = true, dance2 = true, dance3 = true, laugh = false, cheer = false}
+
+math.randomseed(tick())
+
+function configureAnimationSet(name, fileList)
+	if (animTable[name] ~= nil) then
+		for _, connection in pairs(animTable[name].connections) do
+			connection:disconnect()
+		end
+	end
+	animTable[name] = {}
+	animTable[name].count = 0
+	animTable[name].totalWeight = 0	
+	animTable[name].connections = {}
+
+	-- check for config values
+	local config = script:FindFirstChild(name)
+	if (config ~= nil) then
+--		print("Loading anims " .. name)
+		table.insert(animTable[name].connections, config.ChildAdded:connect(function(child) configureAnimationSet(name, fileList) end))
+		table.insert(animTable[name].connections, config.ChildRemoved:connect(function(child) configureAnimationSet(name, fileList) end))
+		local idx = 1
+		for _, childPart in pairs(config:GetChildren()) do
+			if (childPart:IsA("Animation")) then
+				table.insert(animTable[name].connections, childPart.Changed:connect(function(property) configureAnimationSet(name, fileList) end))
+				animTable[name][idx] = {}
+				animTable[name][idx].anim = childPart
+				local weightObject = childPart:FindFirstChild("Weight")
+				if (weightObject == nil) then
+					animTable[name][idx].weight = 1
+				else
+					animTable[name][idx].weight = weightObject.Value
+				end
+				animTable[name].count = animTable[name].count + 1
+				animTable[name].totalWeight = animTable[name].totalWeight + animTable[name][idx].weight
+	--			print(name .. " [" .. idx .. "] " .. animTable[name][idx].anim.AnimationId .. " (" .. animTable[name][idx].weight .. ")")
+				idx = idx + 1
+			end
+		end
+	end
+
+	-- fallback to defaults
+	if (animTable[name].count <= 0) then
+		for idx, anim in pairs(fileList) do
+			animTable[name][idx] = {}
+			animTable[name][idx].anim = Instance.new("Animation")
+			animTable[name][idx].anim.Name = name
+			animTable[name][idx].anim.AnimationId = anim.id
+			animTable[name][idx].weight = anim.weight
+			animTable[name].count = animTable[name].count + 1
+			animTable[name].totalWeight = animTable[name].totalWeight + anim.weight
+--			print(name .. " [" .. idx .. "] " .. anim.id .. " (" .. anim.weight .. ")")
+		end
+	end
+end
+
+-- Setup animation objects
+function scriptChildModified(child)
+	local fileList = animNames[child.Name]
+	if (fileList ~= nil) then
+		configureAnimationSet(child.Name, fileList)
+	end	
+end
+
+script.ChildAdded:connect(scriptChildModified)
+script.ChildRemoved:connect(scriptChildModified)
+
+
+for name, fileList in pairs(animNames) do 
+	configureAnimationSet(name, fileList)
+end	
+
+-- ANIMATION
+
+-- declarations
+local toolAnim = "None"
+local toolAnimTime = 0
+
+local jumpAnimTime = 0
+local jumpAnimDuration = 0.3
+
+local toolTransitionTime = 0.1
+local fallTransitionTime = 0.3
+local jumpMaxLimbVelocity = 0.75
+
+-- functions
+
+function stopAllAnimations()
+	local oldAnim = currentAnim
+
+	-- return to idle if finishing an emote
+	if (emoteNames[oldAnim] ~= nil and emoteNames[oldAnim] == false) then
+		oldAnim = "idle"
+	end
+
+	currentAnim = ""
+	if (currentAnimKeyframeHandler ~= nil) then
+		currentAnimKeyframeHandler:disconnect()
+	end
+
+	if (currentAnimTrack ~= nil) then
+		currentAnimTrack:Stop()
+		currentAnimTrack:Destroy()
+		currentAnimTrack = nil
+	end
+	return oldAnim
+end
+
+function setAnimationSpeed(speed)
+	if speed ~= currentAnimSpeed then
+		currentAnimSpeed = speed
+		currentAnimTrack:AdjustSpeed(currentAnimSpeed)
+	end
+end
+
+function keyFrameReachedFunc(frameName)
+	if (frameName == "End") then
+--		print("Keyframe : ".. frameName)
+		local repeatAnim = stopAllAnimations()
+		local animSpeed = currentAnimSpeed
+		playAnimation(repeatAnim, 0.0, Humanoid)
+		setAnimationSpeed(animSpeed)
+	end
+end
+
+-- Preload animations
+function playAnimation(animName, transitionTime, humanoid)
+	local idleFromEmote = (animName == "idle" and emoteNames[currentAnim] ~= nil)
+	if (animName ~= currentAnim and not idleFromEmote) then		 
+		
+		if (currentAnimTrack ~= nil) then
+			currentAnimTrack:Stop(transitionTime)
+			currentAnimTrack:Destroy()
+		end
+
+		currentAnimSpeed = 1.0
+		local roll = math.random(1, animTable[animName].totalWeight) 
+		local origRoll = roll
+		local idx = 1
+		while (roll > animTable[animName][idx].weight) do
+			roll = roll - animTable[animName][idx].weight
+			idx = idx + 1
+		end
+--		print(animName .. " " .. idx .. " [" .. origRoll .. "]")
+		local anim = animTable[animName][idx].anim
+
+		-- load it to the humanoid; get AnimationTrack
+		currentAnimTrack = humanoid:LoadAnimation(anim)
+		 
+		-- play the animation
+		currentAnimTrack:Play(transitionTime)
+		currentAnim = animName
+
+		-- set up keyframe name triggers
+		if (currentAnimKeyframeHandler ~= nil) then
+			currentAnimKeyframeHandler:disconnect()
+		end
+		currentAnimKeyframeHandler = currentAnimTrack.KeyframeReached:connect(keyFrameReachedFunc)
+	end
+end
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+local toolAnimName = ""
+local toolAnimTrack = nil
+local currentToolAnimKeyframeHandler = nil
+
+function toolKeyFrameReachedFunc(frameName)
+	if (frameName == "End") then
+--		print("Keyframe : ".. frameName)
+		local repeatAnim = stopToolAnimations()
+		playToolAnimation(repeatAnim, 0.0, Humanoid)
+	end
+end
+
+
+function playToolAnimation(animName, transitionTime, humanoid)
+	if (animName ~= toolAnimName) then		 
+		
+		if (toolAnimTrack ~= nil) then
+			toolAnimTrack:Stop()
+			toolAnimTrack:Destroy()
+			transitionTime = 0
+		end
+
+		local roll = math.random(1, animTable[animName].totalWeight) 
+		local origRoll = roll
+		local idx = 1
+		while (roll > animTable[animName][idx].weight) do
+			roll = roll - animTable[animName][idx].weight
+			idx = idx + 1
+		end
+--		print(animName .. " * " .. idx .. " [" .. origRoll .. "]")
+		local anim = animTable[animName][idx].anim
+
+		-- load it to the humanoid; get AnimationTrack
+		toolAnimTrack = humanoid:LoadAnimation(anim)
+		 
+		-- play the animation
+		toolAnimTrack:Play(transitionTime)
+		toolAnimName = animName
+
+		currentToolAnimKeyframeHandler = toolAnimTrack.KeyframeReached:connect(toolKeyFrameReachedFunc)
+	end
+end
+
+function stopToolAnimations()
+	local oldAnim = toolAnimName
+
+	if (currentToolAnimKeyframeHandler ~= nil) then
+		currentToolAnimKeyframeHandler:disconnect()
+	end
+
+	toolAnimName = ""
+	if (toolAnimTrack ~= nil) then
+		toolAnimTrack:Stop()
+		toolAnimTrack:Destroy()
+		toolAnimTrack = nil
+	end
+
+
+	return oldAnim
+end
+
+-------------------------------------------------------------------------------------------
+-------------------------------------------------------------------------------------------
+
+
+function onRunning(speed)
+	if speed>0.01 then
+		playAnimation("walk", 0.1, Humanoid)
+		pose = "Running"
+	else
+		playAnimation("idle", 0.1, Humanoid)
+		pose = "Standing"
+	end
+end
+
+function onDied()
+	pose = "Dead"
+end
+
+function onJumping()
+	playAnimation("jump", 0.1, Humanoid)
+	jumpAnimTime = jumpAnimDuration
+	pose = "Jumping"
+end
+
+function onClimbing(speed)
+	playAnimation("climb", 0.1, Humanoid)
+	setAnimationSpeed(speed / 12.0)
+	pose = "Climbing"
+end
+
+function onGettingUp()
+	pose = "GettingUp"
+end
+
+function onFreeFall()
+	if (jumpAnimTime <= 0) then
+		playAnimation("fall", fallTransitionTime, Humanoid)
+	end
+	pose = "FreeFall"
+end
+
+function onFallingDown()
+	pose = "FallingDown"
+end
+
+function onSeated()
+	pose = "Seated"
+end
+
+function onPlatformStanding()
+	pose = "PlatformStanding"
+end
+
+function onSwimming(speed)
+	if speed>0 then
+		pose = "Running"
+	else
+		pose = "Standing"
+	end
+end
+
+function getTool()	
+	for _, kid in ipairs(Figure:GetChildren()) do
+		if kid.className == "Tool" then return kid end
+	end
+	return nil
+end
+
+function getToolAnim(tool)
+	for _, c in ipairs(tool:GetChildren()) do
+		if c.Name == "toolanim" and c.className == "StringValue" then
+			return c
+		end
+	end
+	return nil
+end
+
+function animateTool()
+	
+	if (toolAnim == "None") then
+		playToolAnimation("toolnone", toolTransitionTime, Humanoid)
+		return
+	end
+
+	if (toolAnim == "Slash") then
+		playToolAnimation("toolslash", 0, Humanoid)
+		return
+	end
+
+	if (toolAnim == "Lunge") then
+		playToolAnimation("toollunge", 0, Humanoid)
+		return
+	end
+end
+
+function moveSit()
+	RightShoulder.MaxVelocity = 0.15
+	LeftShoulder.MaxVelocity = 0.15
+	RightShoulder:SetDesiredAngle(3.14 /2)
+	LeftShoulder:SetDesiredAngle(-3.14 /2)
+	RightHip:SetDesiredAngle(3.14 /2)
+	LeftHip:SetDesiredAngle(-3.14 /2)
+end
+
+local lastTick = 0
+
+function move(time)
+	local amplitude = 1
+	local frequency = 1
+  	local deltaTime = time - lastTick
+  	lastTick = time
+
+	local climbFudge = 0
+	local setAngles = false
+
+  	if (jumpAnimTime > 0) then
+  		jumpAnimTime = jumpAnimTime - deltaTime
+  	end
+
+	if (pose == "FreeFall" and jumpAnimTime <= 0) then
+		playAnimation("fall", fallTransitionTime, Humanoid)
+	elseif (pose == "Seated") then
+		stopAllAnimations()
+		moveSit()
+		return
+	elseif (pose == "Running") then
+		playAnimation("walk", 0.1, Humanoid)
+	elseif (pose == "Dead" or pose == "GettingUp" or pose == "FallingDown" or pose == "Seated" or pose == "PlatformStanding") then
+--		print("Wha " .. pose)
+		amplitude = 0.1
+		frequency = 1
+		setAngles = true
+	end
+
+	if (setAngles) then
+		desiredAngle = amplitude * math.sin(time * frequency)
+
+		RightShoulder:SetDesiredAngle(desiredAngle + climbFudge)
+		LeftShoulder:SetDesiredAngle(desiredAngle - climbFudge)
+		RightHip:SetDesiredAngle(-desiredAngle)
+		LeftHip:SetDesiredAngle(-desiredAngle)
+	end
+
+	-- Tool Animation handling
+	local tool = getTool()
+	if tool then
+	
+		animStringValueObject = getToolAnim(tool)
+
+		if animStringValueObject then
+			toolAnim = animStringValueObject.Value
+			-- message recieved, delete StringValue
+			animStringValueObject.Parent = nil
+			toolAnimTime = time + .3
+		end
+
+		if time > toolAnimTime then
+			toolAnimTime = 0
+			toolAnim = "None"
+		end
+
+		animateTool()		
+	else
+		stopToolAnimations()
+		toolAnim = "None"
+		toolAnimTime = 0
+	end
+end
+
+-- connect events
+Humanoid.Died:connect(onDied)
+Humanoid.Running:connect(onRunning)
+Humanoid.Jumping:connect(onJumping)
+Humanoid.Climbing:connect(onClimbing)
+Humanoid.GettingUp:connect(onGettingUp)
+Humanoid.FreeFalling:connect(onFreeFall)
+Humanoid.FallingDown:connect(onFallingDown)
+Humanoid.Seated:connect(onSeated)
+Humanoid.PlatformStanding:connect(onPlatformStanding)
+Humanoid.Swimming:connect(onSwimming)
+
+-- main program
+
+local runService = game:service("RunService");
+
+-- initialize to idle
+playAnimation("idle", 0.1, Humanoid)
+pose = "Standing"
+
+while Figure.Parent~=nil do
+	local _, time = wait(0.1)
+	move(time)
+end
+
+
+
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_AIUtilities
+local utility = {}
+
+function utility:WideRayCast(start, target, offset, ignoreList)
+	local parts = {}
+	
+	local ray = Ray.new(start, target - start)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	local offsetVector = offset * (target - start):Cross(Vector3.FromNormalId(Enum.NormalId.Top)).unit
+	local ray = Ray.new(start + offsetVector, target - start + offsetVector)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	local ray = Ray.new(start - offsetVector, target - start - offsetVector)
+	local part, point = game.Workspace:FindPartOnRayWithIgnoreList(ray, ignoreList)
+	if part then table.insert(parts, part) end
+	
+	return parts
+end
+
+function utility:FindNearestPathPoint(path, point, start, target, ignoreList)
+	local occludePoint = path:CheckOcclusionAsync(point)
+	if occludePoint > 0 then
+		utility:WideRayCast(start)
+	end
+end
+
+local maxForce = 75
+
+function utility:GetRepulsionVector(unitPosition, otherUnitsPositions)
+	local repulsionVector = Vector3.new(0,0,0)
+	local count = 0
+	for _, other in pairs(otherUnitsPositions) do
+		local fromOther = unitPosition - other 
+		--fromOther = fromOther.unit * ((-maxForce / 5) * math.pow(fromOther.magnitude,2) + maxForce)
+		fromOther = fromOther.unit * 1000 / math.pow((fromOther.magnitude + 1), 2)
+		repulsionVector = repulsionVector + fromOther
+	end
+	return repulsionVector * maxForce
+end
+
+function utility:GetIdleState(StateMachine)
+	local IdleState = StateMachine.NewState()
+	IdleState.Name = "Idle"
+	IdleState.Action = function() end
+	IdleState.Init = function() end
+	return IdleState
+end
+
+function utility:GetClosestVisibleTarget(npcModel, characters, ignoreList, fieldOfView)
+	local closestTarget = nil
+	local closestDistance = math.huge
+	for _, character in pairs(characters) do
+		local toTarget = character.Torso.Position - npcModel.Torso.Position
+		local toTargetWedge = toTarget * Vector3.new(1,0,1)
+		local angle = math.acos(toTargetWedge:Dot(npcModel.Torso.CFrame.lookVector)/toTargetWedge.magnitude)
+		if math.deg(angle) < fieldOfView then
+			local targetRay = Ray.new(npcModel.Torso.Position, toTarget)
+			local part, position = game.Workspace:FindPartOnRayWithIgnoreList(targetRay, ignoreList)
+			if part and part.Parent == character then
+				if toTarget.magnitude < closestDistance then
+					closestTarget = character
+					closestDistance = toTarget.magnitude
+				end
+			end
+		end
+	end
+	return closestTarget
+end
+
+local function isSpaceEmpty(position)
+	local region = Region3.new(position - Vector3.new(2,2,2), position + Vector3.new(2,2,2))
+	return game.Workspace:IsRegion3Empty(region)
+end
+
+function utility:FindCloseEmptySpace(model)
+	local targetPos = Vector3.new(0,0,0)
+	local count = 0
+	math.randomseed(os.time())
+	repeat
+		local xoff = math.random(5,10)
+		if math.random() > .5 then
+			xoff = xoff * -1
+		end
+		local zoff = math.random(5, 10)
+		if math.random() > .5 then
+			zoff = zoff * -1
+		end
+		
+		targetPos = Vector3.new(model.Torso.Position.X + xoff,model.Torso.Position.Y,model.Torso.Position.Z + zoff)
+		if isSpaceEmpty(targetPos) then
+			return targetPos
+		else
+			targetPos = targetPos + Vector3.new(0,4,0)
+		end
+		
+		if isSpaceEmpty(targetPos) then
+			return targetPos
+		end
+		count = count + 1
+	until count > 10
+	return nil
+end
+
+return utility
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_DestroyService
+local destroyService = {}
+
+local destroyQueue = {}
+
+function destroyService:AddItem(theobject, delay)
+	local now = os.time()
+	local destroyObject = {object = theobject, destroyTime = delay + now}
+	for i, storedObject in pairs(destroyQueue) do
+		if destroyQueue[i].destroyTime > destroyObject.destroyTime then
+			table.insert(destroyQueue, i, destroyObject)
+			return true
+		end
+	end
+	table.insert(destroyQueue, destroyObject)
+	return true
+end
+
+local updateThread = coroutine.create(function()
+	while true do 
+		local now = os.time()
+		for _, storedObject in pairs(destroyQueue) do
+			if now >= storedObject.destroyTime then
+				table.remove(destroyQueue, 1)
+				if storedObject.object then
+					storedObject.object:Destroy()
+				end
+			elseif now >= storedObject.destroyTime - 1 then
+				
+				if storedObject.object and storedObject.object:IsA("Part") then
+					local trans = storedObject.object.Transparency + 1/30
+					storedObject.object.Transparency = trans
+				end
+			else 
+				break
+			end
+		end
+		wait()
+	end
+end)
+
+coroutine.resume(updateThread)
+
+return destroyService
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_HumanoidList
+local humanoidList = {}
+local storage = {}
+
+function humanoidList:GetCurrent()
+	return storage
+end
+
+local function findHumanoids(object, list)
+	if object then
+		if object:IsA("Humanoid") then
+			table.insert(list, object)
+		end
+
+		for _, child in pairs(object:GetChildren()) do
+			local childList = findHumanoids(child, list)
+		end
+	end
+end
+
+local updateThread = coroutine.create(function()
+	while true do
+		storage = {}
+		findHumanoids(game.Workspace, storage)
+		wait(3)
+	end
+end)
+
+coroutine.resume(updateThread)
+
+return humanoidList
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_StateMachine
+local machine = {}
+
+machine.new = function()
+	local StateMachine = {}	
+	
+	StateMachine.WaitTime = .2
+	StateMachine.CurrentState = nil
+	StateMachine.SwitchState = function(newState)
+		if StateMachine.CurrentState then
+			StateMachine.CurrentState.Stop()
+		end
+		StateMachine.CurrentState = newState
+		if newState then
+			newState.Start()
+		end
+	end
+	
+	StateMachine.NewState = function()
+		local state = {}
+		state.Name = ""
+		state.Conditions = {}
+		state.isRunning = false
+		state.Action = function() end
+		state.Run = function()
+			state.isRunning = true
+			while state.isRunning do
+				--check conditions
+				--print("checking conditions")
+				for _, condition in pairs(state.Conditions) do
+					--print("Checking " .. condition.Name)
+					if condition.Evaluate() then
+						--print(condition.Name .. " is true. Switching states")
+						StateMachine.SwitchState(condition.TransitionState)
+						return
+					end
+				end
+				
+				--if no conditions satisfied, perform action
+				state.Action()
+				wait(StateMachine.WaitTime)
+			end
+		end
+		state.Init = function()
+			
+		end
+		state.Start = function()
+			--print("Starting " .. state.Name)
+			state.Init()
+			local thread = coroutine.create(state.Run)
+			coroutine.resume(thread)
+		end
+		state.Stop = function()
+			--print("Stopping " .. state.Name)
+			state.isRunning = false
+		end
+		return state
+	end
+	
+	StateMachine.NewCondition = function()
+		local condition = {}
+		condition.Name = ""
+		condition.Evaluate = function() print("replace me") return false end
+		condition.TransitionState = {}
+		return condition
+	end	
+	
+	return StateMachine
+end
+
+return machine
+
+-- ModuleScript: Workspace>Humanoid>ModuleScripts>ROBLOX_PathfindingLibrary
+local PathfindingUtility = {}
+local TargetOffsetMax = 10--5
+local JumpThreshold = 1.5 --2.5
+local NextPointThreshold = 4
+local PathfindingService = game:GetService("PathfindingService")
+PathfindingService.EmptyCutoff = .3
+
+function PathfindingUtility.new()
+	local this = {}
+	
+	local currentTargetPos = nil	
+	local lastTargetPos = Vector3.new(math.huge, math.huge, math.huge)	
+	local path = nil
+	local currentPointIndex = 1	
+	
+	function this:MoveToTarget(character, target)
+		local targetOffset = (lastTargetPos - target).magnitude
+--
+--		local targetOffsetVector = (lastTargetPos - target)
+--		if targetOffsetVector.magnitude < math.huge then
+--			targetOffsetVector = (lastTargetPos - target) * Vector3.new(1,0,1)	
+--		end
+		if targetOffset > TargetOffsetMax then
+		--if targetOffsetVector.magnitude > TargetOffsetMax then
+			--print("moveto")
+			local startPoint = character.Torso.Position
+			local humanoidState = character.Humanoid:GetState()
+			if humanoidState == Enum.HumanoidStateType.Jumping or humanoidState == Enum.HumanoidStateType.Freefall then
+				--print("this")				
+				local ray = Ray.new(character.Torso.Position, Vector3.new(0, -100, 0))
+				local hitPart, hitPoint = game.Workspace:FindPartOnRay(ray, character)
+				if hitPart then
+					startPoint = hitPoint
+				end
+			end
+			--print("making new path")
+			local newTarget = target
+			local ray = Ray.new(target + Vector3.new(0,-3,0), Vector3.new(0, -100, 0))			
+			local hitPart, hitPoint = game.Workspace:FindPartOnRay(ray, character)
+			if hitPoint then
+				if (hitPoint - target).magnitude > 4 then
+					newTarget = newTarget * Vector3.new(1,0,1) + Vector3.new(0,3,0)
+				end
+			end	
+			
+			--local newTarget = Vector3.new(1,0,1) * target + Vector3.new(0, 2, 0)
+			path = PathfindingService:ComputeSmoothPathAsync(startPoint, newTarget, 500)
+			if path.Status ~= Enum.PathStatus.Success then
+				--print(tostring(path.Status))
+			end
+			--path = PathfindingService:ComputeRawPathAsync(startPoint, target, 500)			
+			
+--			game.Workspace.Points:ClearAllChildren()
+--			local ps = path:GetPointCoordinates()
+--			for _, point in pairs(ps) do
+--				local part = Instance.new("Part", game.Workspace.Points)
+--				part.CanCollide = false
+--				part.Anchored = true
+--				part.FormFactor = Enum.FormFactor.Custom
+--				part.Size = Vector3.new(1,1,1)
+--				part.Position = point
+--			end			
+			
+			currentPointIndex = 1
+			lastTargetPos = target
+		end
+		
+		if path then
+			local points = path:GetPointCoordinates()
+			if currentPointIndex < #points then
+				local currentPoint = points[currentPointIndex]
+				local distance = (character.Torso.Position - currentPoint).magnitude
+				if distance < NextPointThreshold then
+					currentPointIndex = currentPointIndex + 1
+				end
+				
+				character.Humanoid:MoveTo(points[currentPointIndex])
+				if points[currentPointIndex].Y - character.Torso.Position.Y > JumpThreshold then
+					character.Humanoid.Jump = true
+				end
+			else
+				character.Humanoid:MoveTo(target)
+			end
+		end
+	end
+	
+	return this
+end
+return PathfindingUtility 
+
+-- LocalScript: StarterPlayer>StarterPlayerScripts>LoadoutSystem
+-- LoadoutSystem.lua [LocalScript]
+-- Manages dual weapon loadout (Primary + Secondary)
+-- Place in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- Get weapon data
+local WeaponData = require(ReplicatedStorage:WaitForChild("WeaponData"))
+
+-- Loadout configuration
+local Loadout = {
+	PrimaryWeapon = "StarterFists",  -- Default primary
+	SecondaryWeapon = "Firecracker",  -- Default secondary
+	CurrentSlot = "Primary", -- Which slot is currently equipped
+}
+
+-- Tool references
+local primaryTool = nil
+local secondaryTool = nil
+local currentTool = nil
+
+-- Get or create tool for weapon
+local function createWeaponTool(weaponName)
+	-- Check if tool already exists in player's inventory
+	local existingTool = player.Backpack:FindFirstChild(weaponName)
+	if existingTool then
+		return existingTool
+	end
+
+	-- Check if tool exists in character (already equipped)
+	existingTool = character:FindFirstChild(weaponName)
+	if existingTool and existingTool:IsA("Tool") then
+		return existingTool
+	end
+
+	-- Create new tool
+	local tool = Instance.new("Tool")
+	tool.Name = weaponName
+	tool.RequiresHandle = false
+	tool.ManualActivationOnly = true
+	tool.CanBeDropped = false
+
+	-- Add weapon name attribute
+	tool:SetAttribute("WeaponName", weaponName)
+
+	-- Get weapon data for icon (if available)
+	local weaponData = WeaponData.GetWeapon(weaponName)
+	if weaponData then
+		tool.ToolTip = weaponData.Description
+		-- TODO: Set TextureId to weaponData.IconId when we have icons
+	end
+
+	return tool
+end
+
+-- Equip weapon from loadout slot
+local function equipWeapon(slotName)
+	-- Determine which weapon to equip
+	local weaponName = slotName == "Primary" and Loadout.PrimaryWeapon or Loadout.SecondaryWeapon
+
+	-- Unequip current weapon
+	if currentTool and currentTool.Parent == character then
+		currentTool.Parent = player.Backpack
+	end
+
+	-- Get or create the tool
+	local tool = slotName == "Primary" and primaryTool or secondaryTool
+
+	if not tool then
+		tool = createWeaponTool(weaponName)
+		tool.Parent = player.Backpack
+
+		-- Store reference
+		if slotName == "Primary" then
+			primaryTool = tool
+		else
+			secondaryTool = tool
+		end
+	end
+
+	-- Equip the tool
+	if tool.Parent == player.Backpack then
+		-- Wait a frame to ensure proper equipping
+		task.wait()
+		humanoid:EquipTool(tool)
+	end
+
+	currentTool = tool
+	Loadout.CurrentSlot = slotName
+
+	print("Equipped", slotName, "weapon:", weaponName)
+end
+
+-- Toggle between primary and secondary
+local function toggleWeapon()
+	if Loadout.CurrentSlot == "Primary" then
+		equipWeapon("Secondary")
+	else
+		equipWeapon("Primary")
+	end
+end
+
+-- Handle input
+local function onInputBegan(input, gameProcessed)
+	if gameProcessed then return end
+
+	-- T key = Toggle weapon
+	if input.KeyCode == Enum.KeyCode.T then
+		toggleWeapon()
+	end
+
+	-- Number keys for direct slot selection
+	if input.KeyCode == Enum.KeyCode.One then
+		equipWeapon("Primary")
+	end
+
+	if input.KeyCode == Enum.KeyCode.Two then
+		equipWeapon("Secondary")
+	end
+end
+
+-- Initialize loadout
+local function initializeLoadout()
+	-- Wait for character to fully load
+	local humanoid = character:WaitForChild("Humanoid")
+
+	-- Create both weapon tools
+	primaryTool = createWeaponTool(Loadout.PrimaryWeapon)
+	secondaryTool = createWeaponTool(Loadout.SecondaryWeapon)
+
+	-- Put both in backpack
+	primaryTool.Parent = player.Backpack
+	secondaryTool.Parent = player.Backpack
+
+	-- Equip primary weapon by default
+	task.wait(0.5) -- Wait for backpack to settle
+	equipWeapon("Primary")
+
+	print("Loadout initialized!")
+	print("Primary:", Loadout.PrimaryWeapon)
+	print("Secondary:", Loadout.SecondaryWeapon)
+	print("Press T to swap, or 1/2 for direct selection")
+end
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+	primaryTool = nil
+	secondaryTool = nil
+	currentTool = nil
+
+	-- Wait a bit then reinitialize
+	task.wait(1)
+	initializeLoadout()
+end)
+
+-- Setup
+UserInputService.InputBegan:Connect(onInputBegan)
+
+-- Initial setup
+initializeLoadout()
+
+print("LoadoutSystem initialized for:", player.Name)
+
+-- LocalScript: StarterPlayer>StarterCharacterScripts>CameraController
+-- CameraController.lua [LocalScript]
+-- Third-person camera system for the RPG game
+-- Place in StarterPlayer > StarterPlayerScripts
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local ContextActionService = game:GetService("ContextActionService")
+
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Camera Configuration
+local Config = {
+	-- Distance settings
+	MinDistance = 8,
+	MaxDistance = 20,
+	DefaultDistance = 12,
+	ZoomSpeed = 2,
+
+	-- Angle settings
+	MinPitch = -80, -- degrees (looking down)
+	MaxPitch = 80,  -- degrees (looking up)
+
+	-- Smoothing
+	Smoothness = 0.15,
+	RotationSpeed = 0.3,
+
+	-- Offset from character (Over-the-shoulder style)
+	OffsetY = 2, -- Height offset above character
+	OffsetX = 4, -- Horizontal offset for RIGHT shoulder (left will be -3)
+	OffsetXLeft = 3, -- Horizontal offset for LEFT shoulder (slightly less than right)
+	OffsetZ = 0, -- Forward/backward offset
+
+	-- Mouse sensitivity
+	MouseSensitivity = 0.3,
+
+	-- Lock on target settings (for future use)
+	LockOnEnabled = false,
+	LockOnDistance = 30
+}
+
+-- State variables
+local currentDistance = Config.DefaultDistance
+local currentRotationX = 0 -- Horizontal rotation (yaw)
+local currentRotationY = 0 -- Vertical rotation (pitch)
+local cameraLocked = false -- Toggle state for camera lock
+local lastMousePosition = Vector2.new()
+local isRightShoulder = true -- Track which shoulder camera is on (true = right, false = left)
+local currentShoulderOffset = Config.OffsetX -- Smoothly transitions between shoulder positions
+local targetShoulderOffset = Config.OffsetX -- Target offset for smooth transition
+
+-- Camera shake variables (for future combat feel)
+local shakeOffset = Vector3.new()
+local shakeMagnitude = 0
+
+-- Set camera to scriptable mode
+camera.CameraType = Enum.CameraType.Scriptable
+
+-- Input handling
+local function onInputBegan(input, gameProcessed)
+	if gameProcessed then return end
+
+	-- Tab key to toggle camera lock
+	if input.KeyCode == Enum.KeyCode.CapsLock then
+		-- Toggle camera lock
+		cameraLocked = not cameraLocked
+
+		if cameraLocked then
+			UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+			UserInputService.MouseIconEnabled = false -- Hide cursor
+			print("Camera locked - mouse controls camera")
+		else
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			UserInputService.MouseIconEnabled = true -- Show cursor
+			print("Camera unlocked - character faces camera direction")
+		end
+	end
+
+	-- Toggle camera shoulder (F key)
+	if input.KeyCode == Enum.KeyCode.F then
+		isRightShoulder = not isRightShoulder
+		if isRightShoulder then
+			targetShoulderOffset = Config.OffsetX -- Right shoulder (4 studs)
+			print("Camera view: Right shoulder")
+		else
+			targetShoulderOffset = -Config.OffsetXLeft -- Left shoulder (-3 studs)
+			print("Camera view: Left shoulder")
+		end
+	end
+end
+
+local function onInputEnded(input, gameProcessed)
+	-- No longer needed for toggle, but keeping for future input handling
+end
+
+local function onInputChanged(input, gameProcessed)
+	if gameProcessed then return end
+
+	-- Handle mouse wheel zoom
+	if input.UserInputType == Enum.UserInputType.MouseWheel then
+		currentDistance = math.clamp(
+			currentDistance - input.Position.Z * Config.ZoomSpeed,
+			Config.MinDistance,
+			Config.MaxDistance
+		)
+	end
+
+	-- Handle camera rotation (only when camera is locked)
+	if input.UserInputType == Enum.UserInputType.MouseMovement and cameraLocked then
+		local delta = input.Delta
+
+		-- Update rotation with sensitivity
+		currentRotationX = currentRotationX - delta.X * Config.MouseSensitivity
+		-- Inverted Y: moving mouse up looks up (positive delta.Y increases pitch)
+		currentRotationY = math.clamp(
+			currentRotationY + delta.Y * Config.MouseSensitivity,
+			Config.MinPitch,
+			Config.MaxPitch
+		)
+	end
+end
+
+-- Calculate camera position
+local function updateCamera()
+	if not character or not character.Parent then
+		character = player.Character
+		if character then
+			humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+		end
+		return
+	end
+
+	if not humanoidRootPart or not humanoidRootPart.Parent then
+		return
+	end
+
+	-- Make character face camera direction (shift-lock style)
+	-- Only rotate on Y axis (horizontal), not pitch
+	local rotationXRad = math.rad(currentRotationX)
+	local targetCFrame = CFrame.new(humanoidRootPart.Position) * CFrame.Angles(0, rotationXRad, 0)
+	humanoidRootPart.CFrame = targetCFrame
+
+	-- Get character position with vertical offset
+	local characterPosition = humanoidRootPart.Position + Vector3.new(0, Config.OffsetY, 0)
+
+	-- Calculate camera rotation
+	local rotationYRad = math.rad(currentRotationY)
+
+	-- Calculate camera offset based on rotation and distance
+	local horizontalDistance = currentDistance * math.cos(rotationYRad)
+	local verticalDistance = currentDistance * math.sin(rotationYRad)
+
+	-- Base offset from rotation
+	local offsetX = horizontalDistance * math.sin(rotationXRad)
+	local offsetZ = horizontalDistance * math.cos(rotationXRad)
+
+	-- Apply over-the-shoulder offset (shifts camera to the right or left based on toggle)
+	-- We need to calculate the "right" vector based on camera rotation
+	local rightVector = Vector3.new(math.cos(rotationXRad), 0, -math.sin(rotationXRad))
+	local forwardVector = Vector3.new(math.sin(rotationXRad), 0, math.cos(rotationXRad))
+
+	-- Smoothly interpolate shoulder offset for smooth transition (0.25 = quick but smooth)
+	currentShoulderOffset = currentShoulderOffset + (targetShoulderOffset - currentShoulderOffset) * 0.25
+
+	-- Apply shoulder offset in character-relative space
+	local shoulderOffset = (rightVector * currentShoulderOffset) + (forwardVector * Config.OffsetZ)
+
+	-- Calculate final camera position
+	local targetPosition = characterPosition + Vector3.new(offsetX, verticalDistance, offsetZ) + shoulderOffset
+
+	-- Apply camera shake (if any)
+	targetPosition = targetPosition + shakeOffset
+
+	-- Smooth camera movement
+	local currentPosition = camera.CFrame.Position
+	local smoothedPosition = currentPosition:Lerp(targetPosition, Config.Smoothness)
+
+	-- Calculate look-at position (offset slightly based on current shoulder)
+	local lookAtPosition = characterPosition + (rightVector * (currentShoulderOffset * 0.5))
+
+	-- Set camera CFrame (look at offset character position)
+	camera.CFrame = CFrame.new(smoothedPosition, lookAtPosition)
+
+	-- Update shake (decay over time)
+	if shakeMagnitude > 0 then
+		shakeMagnitude = shakeMagnitude * 0.9
+		if shakeMagnitude < 0.01 then
+			shakeMagnitude = 0
+			shakeOffset = Vector3.new()
+		else
+			-- Random shake offset
+			shakeOffset = Vector3.new(
+				(math.random() - 0.5) * shakeMagnitude,
+				(math.random() - 0.5) * shakeMagnitude,
+				(math.random() - 0.5) * shakeMagnitude
+			)
+		end
+	end
+end
+
+-- Camera shake function (for hit feedback, explosions, etc.)
+local function shakeCamera(magnitude, duration)
+	shakeMagnitude = magnitude
+
+	-- Optional: add duration-based decay
+	if duration then
+		task.delay(duration, function()
+			shakeMagnitude = 0
+			shakeOffset = Vector3.new()
+		end)
+	end
+end
+
+-- Reset camera to default
+local function resetCamera()
+	currentDistance = Config.DefaultDistance
+	currentRotationX = 0
+	currentRotationY = 0
+end
+
+-- Initialize camera system
+local function setup()
+	-- Connect input handlers
+	UserInputService.InputBegan:Connect(onInputBegan)
+	UserInputService.InputEnded:Connect(onInputEnded)
+	UserInputService.InputChanged:Connect(onInputChanged)
+
+	-- Connect camera update to render step for smooth motion
+	RunService.RenderStepped:Connect(updateCamera)
+
+	-- Handle character respawn
+	player.CharacterAdded:Connect(function(newCharacter)
+		character = newCharacter
+		humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+		resetCamera()
+	end)
+
+	print("CameraController initialized for:", player.Name)
+	print("Controls: Tab = Toggle Camera Lock, F = Toggle Shoulder View")
+end
+
+-- Initialize
+setup()
+
+-- Export functions for other scripts
+return {
+	ShakeCamera = shakeCamera,
+	ResetCamera = resetCamera,
+	Config = Config
+}
+
+-- LocalScript: StarterPlayer>StarterCharacterScripts>CharacterController
+-- CharacterController.lua [LocalScript]
+-- Handles character movement, sprinting, and evading for the RPG game
+-- Place in StarterPlayer > StarterCharacterScripts
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local character = script.Parent
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Movement Configuration
+local Config = {
+	-- Base speeds
+	WalkSpeed = 16,
+	SprintSpeed = 24,
+
+	-- Stamina settings
+	MaxStamina = 100,
+	SprintStaminaCost = 10, -- per second
+	EvadeStaminaCost = 25,  -- per dodge roll
+	StaminaRegenDelay = 5, -- seconds before regen starts
+	StaminaRegenRate = 20, -- per second
+
+	-- Jump settings
+	JumpPower = 50,
+
+	-- Evade/Dodge Roll settings
+	DodgeDistance = 15, -- studs to move
+	DodgeDuration = 0.4, -- seconds
+	DodgeCooldown = 1.0, -- seconds between dodges (total time from start of one dodge to start of next)
+
+	-- Animation settings
+	AnimationBlendTime = 0.1
+}
+
+-- Keybind Configuration
+local Keybinds = {
+	-- Movement
+	Sprint = Enum.KeyCode.LeftShift,
+	Dodge = Enum.KeyCode.V,
+
+	-- Combat (Future)
+	Grapple = Enum.KeyCode.E,
+	Deflect = Enum.KeyCode.Q,
+
+	-- UI/System (Future)
+	ToggleView = Enum.KeyCode.F,      -- Toggle camera view/spectate mode
+	ToggleWeapon = Enum.KeyCode.T,    -- Switch between primary weapons
+
+	-- Abilities (Future)
+	Passive = Enum.KeyCode.One,       -- Activate passive (Tier 1)
+	Ability1 = Enum.KeyCode.Two,      -- Activate ability (Tier 2)
+	Ultimate = Enum.KeyCode.Three,    -- Activate ultimate (Tier 3)
+}
+
+-- State variables
+local isSprinting = false
+local isEvading = false
+local canEvade = true
+local currentStamina = Config.MaxStamina
+local lastActionTime = 0
+local lastEvadeTime = 0
+
+-- Animation IDs (you'll replace these with your actual animation IDs)
+local Animations = {
+	Idle = nil, -- rbxassetid://YOUR_IDLE_ANIMATION_ID
+	Walk = nil,
+	Run = nil,
+	Sprint = nil,
+	Jump = nil,
+	Fall = nil,
+	DodgeRollForward = nil,  -- Add your forward dodge animation here
+	DodgeRollBackward = nil, -- Add your backward dodge animation here
+	DodgeRollLeft = nil,     -- Add your left dodge animation here
+	DodgeRollRight = nil,    -- Add your right dodge animation here
+}
+
+-- Load animations
+local loadedAnimations = {}
+local animator = humanoid:WaitForChild("Animator")
+
+local function loadAnimations()
+	for name, animId in pairs(Animations) do
+		if animId then
+			local anim = Instance.new("Animation")
+			anim.AnimationId = animId
+			loadedAnimations[name] = animator:LoadAnimation(anim)
+		end
+	end
+end
+
+-- Initialize humanoid settings
+local function initializeHumanoid()
+	humanoid.WalkSpeed = Config.WalkSpeed
+	humanoid.JumpPower = Config.JumpPower
+
+	-- Configure humanoid state
+	humanoid.AutoRotate = false -- Camera controls rotation (shift-lock style)
+	humanoid.AutoJumpEnabled = false
+
+	-- Create stamina values for GUI to read
+	local staminaValue = character:FindFirstChild("StaminaValue")
+	if not staminaValue then
+		staminaValue = Instance.new("NumberValue")
+		staminaValue.Name = "StaminaValue"
+		staminaValue.Value = Config.MaxStamina
+		staminaValue.Parent = character
+	end
+
+	local maxStaminaValue = character:FindFirstChild("MaxStaminaValue")
+	if not maxStaminaValue then
+		maxStaminaValue = Instance.new("NumberValue")
+		maxStaminaValue.Name = "MaxStaminaValue"
+		maxStaminaValue.Value = Config.MaxStamina
+		maxStaminaValue.Parent = character
+	end
+end
+
+-- Perform dodge roll
+local function performDodge()
+	-- Check if we can evade (stamina and cooldown)
+	if not canEvade or isEvading or currentStamina < Config.EvadeStaminaCost then
+		print("Cannot dodge - Not ready, already dodging, or insufficient stamina")
+		return
+	end
+
+	-- Check cooldown
+	local currentTime = tick()
+	if currentTime - lastEvadeTime < Config.DodgeCooldown then
+		print("Dodge on cooldown")
+		return
+	end
+
+	-- IMMEDIATELY consume stamina (at the start of dodge)
+	currentStamina = math.max(0, currentStamina - Config.EvadeStaminaCost)
+
+	-- Update stamina value for GUI immediately
+	local staminaValue = character:FindFirstChild("StaminaValue")
+	if staminaValue then
+		staminaValue.Value = currentStamina
+	end
+
+	lastActionTime = currentTime
+	lastEvadeTime = currentTime
+
+	-- Set evading state
+	isEvading = true
+	canEvade = false
+
+	-- Get movement input direction
+	local moveDirection = humanoid.MoveDirection
+
+	-- If no movement input, dodge forward based on where character is facing
+	local dodgeDirection
+	if moveDirection.Magnitude > 0 then
+		-- Use the actual movement direction (accounts for WASD input relative to camera)
+		dodgeDirection = moveDirection.Unit
+	else
+		-- No input, dodge forward based on where character is facing
+		dodgeDirection = rootPart.CFrame.LookVector
+	end
+
+	-- Keep dodge horizontal only (no vertical component)
+	dodgeDirection = Vector3.new(dodgeDirection.X, 0, dodgeDirection.Z).Unit
+
+	-- Determine which direction the dodge is relative to character facing
+	-- This is used to select the correct animation
+	local characterForward = rootPart.CFrame.LookVector
+	local characterRight = rootPart.CFrame.RightVector
+
+	-- Calculate dot products to determine direction
+	local forwardDot = dodgeDirection:Dot(characterForward)
+	local rightDot = dodgeDirection:Dot(characterRight)
+
+	-- Determine primary dodge direction and select animation
+	local dodgeAnimationName = "DodgeRollForward" -- Default
+
+	if math.abs(forwardDot) > math.abs(rightDot) then
+		-- Primarily forward or backward
+		if forwardDot > 0 then
+			dodgeAnimationName = "DodgeRollForward"
+		else
+			dodgeAnimationName = "DodgeRollBackward"
+		end
+	else
+		-- Primarily left or right
+		if rightDot > 0 then
+			dodgeAnimationName = "DodgeRollRight"
+		else
+			dodgeAnimationName = "DodgeRollLeft"
+		end
+	end
+
+	-- Calculate target position
+	local targetPosition = rootPart.Position + (dodgeDirection * Config.DodgeDistance)
+
+	-- Create dodge movement using BodyVelocity
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.MaxForce = Vector3.new(50000, 0, 50000) -- Only horizontal movement
+	bodyVelocity.Velocity = dodgeDirection * (Config.DodgeDistance / Config.DodgeDuration)
+	bodyVelocity.Parent = rootPart
+
+	-- Play dodge animation if available
+	if loadedAnimations[dodgeAnimationName] then
+		loadedAnimations[dodgeAnimationName]:Play()
+		print("Playing animation:", dodgeAnimationName)
+	else
+		print("Animation not found:", dodgeAnimationName, "- Add animation ID to Animations table")
+	end
+
+	-- Optional: Add i-frames (invincibility frames) here in future
+	-- This would involve checking a property before applying damage
+
+	-- Clean up after dodge duration
+	task.delay(Config.DodgeDuration, function()
+		if bodyVelocity and bodyVelocity.Parent then
+			bodyVelocity:Destroy()
+		end
+		isEvading = false
+
+		-- Cooldown before next dodge
+		task.wait(Config.DodgeCooldown - Config.DodgeDuration)
+		canEvade = true
+	end)
+
+	print("Dodge roll performed:", dodgeAnimationName)
+end
+
+-- Handle sprint input
+local function handleSprintInput(input, gameProcessed)
+	-- Don't check gameProcessed for sprint - we want it to work regardless
+	if isEvading then return end
+
+	if input.KeyCode == Keybinds.Sprint then
+		-- Check if player has enough stamina AND is holding W
+		if currentStamina > 0 and UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			isSprinting = true
+			humanoid.WalkSpeed = Config.SprintSpeed
+			print("Sprinting enabled! WalkSpeed set to:", Config.SprintSpeed)
+		else
+			if currentStamina <= 0 then
+				print("Not enough stamina to sprint!")
+			else
+				print("Must hold W to sprint!")
+			end
+		end
+	end
+end
+
+local function handleSprintEnd(input, gameProcessed)
+	-- Don't check gameProcessed here either
+	if input.KeyCode == Keybinds.Sprint then
+		isSprinting = false
+		humanoid.WalkSpeed = Config.WalkSpeed
+		print("Sprint stopped. WalkSpeed set back to:", Config.WalkSpeed)
+	end
+end
+
+-- Handle evade input
+local function handleEvadeInput(input, gameProcessed)
+	if gameProcessed or isEvading then return end
+
+	-- V key for dodge roll
+	if input.KeyCode == Keybinds.Dodge then
+		performDodge()
+	end
+end
+
+-- ========================================
+-- FUTURE SYSTEM PLACEHOLDERS
+-- ========================================
+
+-- Handle grapple input (FUTURE - Phase 3)
+local function handleGrappleInput(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == Keybinds.Grapple then
+		print("Grapple pressed (E) - Not yet implemented")
+		-- TODO: Implement grapple system in Phase 3
+	end
+end
+
+-- Handle deflect input (FUTURE - Phase 5)
+local function handleDeflectInput(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == Keybinds.Deflect then
+		print("Deflect pressed (Q) - Not yet implemented")
+		-- TODO: Implement deflect system in Phase 5
+	end
+end
+
+-- Handle toggle weapon input (FUTURE - Phase 4)
+local function handleToggleWeaponInput(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == Keybinds.ToggleWeapon then
+		print("Toggle Weapon pressed (T) - Not yet implemented")
+		-- TODO: Implement weapon switching in Phase 4
+	end
+end
+
+-- Handle ability inputs (FUTURE - Phase 4)
+local function handleAbilityInput(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == Keybinds.Passive then
+		print("Passive pressed (1) - Not yet implemented")
+		-- TODO: Implement passive activation in Phase 4
+	elseif input.KeyCode == Keybinds.Ability1 then
+		print("Ability1 pressed (2) - Not yet implemented")
+		-- TODO: Implement ability activation in Phase 4
+	elseif input.KeyCode == Keybinds.Ultimate then
+		print("Ultimate pressed (3) - Not yet implemented")
+		-- TODO: Implement ultimate activation in Phase 4
+	end
+end
+
+-- Main update loop
+local function onHeartbeat(deltaTime)
+	-- Don't process stamina if evading
+	if isEvading then
+		return
+	end
+
+	-- Check if still holding W while sprinting, and not pressing A, D, or S
+	if isSprinting then
+		if not UserInputService:IsKeyDown(Enum.KeyCode.W) then
+			isSprinting = false
+			humanoid.WalkSpeed = Config.WalkSpeed
+			print("Sprint stopped - W key released")
+		elseif UserInputService:IsKeyDown(Enum.KeyCode.A) or UserInputService:IsKeyDown(Enum.KeyCode.D) or UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			isSprinting = false
+			humanoid.WalkSpeed = Config.WalkSpeed
+			print("Sprint stopped - A, D, or S pressed")
+		end
+	end
+
+	-- Check if shift is held and W is pressed (allows shift then W to work)
+	if not isSprinting and UserInputService:IsKeyDown(Enum.KeyCode.LeftShift) and UserInputService:IsKeyDown(Enum.KeyCode.W) then
+		if currentStamina > 0 and not UserInputService:IsKeyDown(Enum.KeyCode.A) and not UserInputService:IsKeyDown(Enum.KeyCode.D) and not UserInputService:IsKeyDown(Enum.KeyCode.S) then
+			isSprinting = true
+			humanoid.WalkSpeed = Config.SprintSpeed
+		end
+	end
+
+	-- Handle stamina drain while sprinting
+	if isSprinting then
+		currentStamina = math.max(0, currentStamina - Config.SprintStaminaCost * deltaTime)
+
+		-- Stop sprinting if out of stamina
+		if currentStamina <= 0 then
+			isSprinting = false
+			humanoid.WalkSpeed = Config.WalkSpeed
+		end
+
+		lastActionTime = tick()
+	else
+		-- Regenerate stamina after delay
+		if tick() - lastActionTime >= Config.StaminaRegenDelay then
+			currentStamina = math.min(Config.MaxStamina, currentStamina + Config.StaminaRegenRate * deltaTime)
+		end
+	end
+
+	-- Update stamina value for GUI
+	local staminaValue = character:FindFirstChild("StaminaValue")
+	if staminaValue then
+		staminaValue.Value = currentStamina
+	end
+end
+
+-- Setup function
+local function setup()
+	initializeHumanoid()
+	loadAnimations()
+
+	-- Connect input handlers
+	UserInputService.InputBegan:Connect(handleSprintInput)
+	UserInputService.InputEnded:Connect(handleSprintEnd)
+	UserInputService.InputBegan:Connect(handleEvadeInput)
+
+	-- Connect future input handlers
+	UserInputService.InputBegan:Connect(handleGrappleInput)
+	UserInputService.InputBegan:Connect(handleDeflectInput)
+	UserInputService.InputBegan:Connect(handleToggleWeaponInput)
+	UserInputService.InputBegan:Connect(handleAbilityInput)
+
+	-- Connect update loop
+	RunService.Heartbeat:Connect(onHeartbeat)
+
+	print("CharacterController initialized for:", player.Name)
+	print("Controls: Left Shift = Sprint, V = Dodge Roll, F = Toggle Camera View")
+	print("Future Keybinds: E=Grapple, Q=Deflect, T=Toggle Weapon, 1/2/3=Abilities")
+end
+
+-- Initialize when character is ready
+if character and humanoid and rootPart then
+	setup()
+end
+
+-- Expose stamina value for UI
+local function getStamina()
+	return currentStamina, Config.MaxStamina
+end
+
+-- Expose evading state
+local function getIsEvading()
+	return isEvading
+end
+
+-- Expose dodge cooldown info
+local function getEvadeCooldown()
+	local currentTime = tick()
+	local timeSinceLastEvade = currentTime - lastEvadeTime
+	local remainingCooldown = math.max(0, Config.DodgeCooldown - timeSinceLastEvade)
+	return remainingCooldown, Config.DodgeCooldown
+end
+
+-- Export for other scripts to access
+return {
+	GetStamina = getStamina,
+	GetIsEvading = getIsEvading,
+	GetEvadeCooldown = getEvadeCooldown,
+	Config = Config
+}
+
+-- LocalScript: StarterPlayer>StarterCharacterScripts>CombatController
+-- CombatController.lua [LocalScript] - FIXED VERSION
+-- Handles combat system - attacks, combos, hit detection
+-- Place in StarterPlayer > StarterCharacterScripts (NOT StarterPlayerScripts!)
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+
+-- Get weapon data
+local WeaponData = require(ReplicatedStorage:WaitForChild("WeaponData"))
+local currentWeapon = nil -- No weapon equipped by default
+local equippedTool = nil -- Reference to equipped Tool
+
+-- Remote events for server validation
+local RemoteEvents = ReplicatedStorage:WaitForChild("RemoteEvents")
+local AttackEvent = RemoteEvents:WaitForChild("AttackEvent")
+local HitEvent = RemoteEvents:WaitForChild("HitEvent")
+local NPCHitEvent = RemoteEvents:WaitForChild("NPCHitEvent") -- New event for NPCs
+
+-- Combat state
+local isAttacking = false
+local comboCount = 0
+local lastAttackTime = 0
+local canAttack = true
+
+-- Ability states
+local abilityTier1Active = false -- Passive
+local abilityTier2Cooldown = 0
+local abilityTier3Cooldown = 0
+
+-- Check if weapon is equipped
+local function hasWeaponEquipped()
+	return currentWeapon ~= nil and equippedTool ~= nil
+end
+
+-- Get current stamina from CharacterController
+local function getCurrentStamina()
+	local staminaValue = character:FindFirstChild("StaminaValue")
+	return staminaValue and staminaValue.Value or 0
+end
+
+-- Consume stamina
+local function consumeStamina(amount)
+	local staminaValue = character:FindFirstChild("StaminaValue")
+	if staminaValue then
+		staminaValue.Value = math.max(0, staminaValue.Value - amount)
+	end
+end
+
+-- Create hitbox for melee attacks
+local function createHitbox(size, duration, damageAmount, attackType)
+	local hitbox = Instance.new("Part")
+	hitbox.Size = size or Vector3.new(5, 5, 5)
+	hitbox.CFrame = rootPart.CFrame * CFrame.new(0, 0, -3) -- In front of player
+	hitbox.Transparency = 1 -- Invisible
+	hitbox.CanCollide = false
+	hitbox.Anchored = true
+	hitbox.Parent = workspace
+
+	-- Visualize hitbox in testing (uncomment to see)
+	-- hitbox.Transparency = 0.7
+	-- hitbox.Color = Color3.fromRGB(255, 0, 0)
+
+	-- Store hit entities to prevent double-hitting
+	local hitEntities = {}
+
+	-- Detect hits
+	local connection
+	connection = hitbox.Touched:Connect(function(hit)
+		local hitCharacter = hit.Parent
+		if not hitCharacter then return end
+		if hitCharacter == character then return end -- Don't hit yourself
+		if hitEntities[hitCharacter] then return end -- Already hit this entity
+
+		local hitHumanoid = hitCharacter:FindFirstChild("Humanoid")
+		if not hitHumanoid then return end -- No humanoid = not a valid target
+
+		hitEntities[hitCharacter] = true
+
+		-- Check if it's a player or NPC
+		local enemyPlayer = Players:GetPlayerFromCharacter(hitCharacter)
+
+		if enemyPlayer then
+			-- It's a player - send to server for validation
+			HitEvent:FireServer(enemyPlayer, damageAmount, attackType, comboCount)
+			print("Hit player:", enemyPlayer.Name, "for", damageAmount, "damage!")
+		else
+			-- It's an NPC/dummy - damage directly (client-side for NPCs)
+			NPCHitEvent:FireServer(hitCharacter, damageAmount, attackType)
+			print("Hit NPC:", hitCharacter.Name, "for", damageAmount, "damage!")
+		end
+	end)
+
+	-- Remove hitbox after duration
+	task.delay(duration or 0.2, function()
+		connection:Disconnect()
+		hitbox:Destroy()
+	end)
+end
+
+-- Play attack animation
+local function playAttackAnimation(animationName)
+	-- Placeholder - will load actual animations later
+	print("Playing animation:", animationName)
+
+	-- TODO: Load and play animation from currentWeapon.Animations[animationName]
+end
+
+-- Play VFX effect
+local function playVFX(effectName)
+	-- Placeholder - will spawn VFX particles later
+	print("Playing VFX:", effectName)
+
+	-- TODO: Spawn particle effect from currentWeapon.VFX[effectName]
+end
+
+-- Play SFX sound
+local function playSFX(soundName)
+	-- Placeholder - will play sound later
+	print("Playing SFX:", soundName)
+
+	-- TODO: Play sound from currentWeapon.SFX[soundName]
+end
+
+-- Perform light attack
+local function performLightAttack()
+	-- CHECK: Must have weapon equipped
+	if not hasWeaponEquipped() then
+		print("No weapon equipped!")
+		return
+	end
+
+	if isAttacking or not canAttack then return end
+
+	-- Check stamina
+	if getCurrentStamina() < currentWeapon.StaminaCosts.LightAttack then
+		print("Not enough stamina for light attack!")
+		return
+	end
+
+	-- Check combo window
+	local currentTime = tick()
+	if currentTime - lastAttackTime > currentWeapon.ComboWindow then
+		comboCount = 0 -- Reset combo
+	end
+
+	-- Increment combo
+	comboCount = math.min(comboCount + 1, currentWeapon.MaxComboHits)
+
+	-- Consume stamina
+	consumeStamina(currentWeapon.StaminaCosts.LightAttack)
+
+	-- Set attacking state
+	isAttacking = true
+	lastAttackTime = currentTime
+
+	-- Get attack data based on combo
+	local attackAnim = "LightAttack" .. comboCount
+	local attackSpeed = currentWeapon.AttackSpeed[attackAnim]
+
+	-- Calculate damage
+	local damage = 0
+	if comboCount == 1 then
+		damage = currentWeapon.Damage.LightAttack1
+	elseif comboCount == 2 then
+		damage = currentWeapon.Damage.LightAttack2
+	elseif comboCount == 3 then
+		damage = currentWeapon.Damage.LightAttack3
+	end
+
+	-- Play effects
+	playAttackAnimation(attackAnim)
+	playVFX("PreAttack" .. comboCount)
+	playSFX("LightAttackWhoosh" .. comboCount)
+
+	-- Create hitbox with damage info
+	task.delay(0.1, function() -- Small delay for windup
+		createHitbox(Vector3.new(5, 5, 5), 0.2, damage, "Light")
+	end)
+
+	-- End attack after animation
+	task.delay(attackSpeed, function()
+		isAttacking = false
+
+		-- Reset combo if max reached
+		if comboCount >= currentWeapon.MaxComboHits then
+			comboCount = 0
+		end
+	end)
+
+	-- Notify server
+	AttackEvent:FireServer("Light", comboCount)
+
+	print("Light attack", comboCount, "performed!")
+end
+
+-- Perform heavy attack
+local function performHeavyAttack()
+	-- CHECK: Must have weapon equipped
+	if not hasWeaponEquipped() then
+		print("No weapon equipped!")
+		return
+	end
+
+	if isAttacking or not canAttack then return end
+
+	-- Check stamina
+	if getCurrentStamina() < currentWeapon.StaminaCosts.HeavyAttack then
+		print("Not enough stamina for heavy attack!")
+		return
+	end
+
+	-- Consume stamina
+	consumeStamina(currentWeapon.StaminaCosts.HeavyAttack)
+
+	-- Reset combo
+	comboCount = 0
+
+	-- Set attacking state
+	isAttacking = true
+	lastAttackTime = tick()
+
+	-- Play effects
+	playAttackAnimation("HeavyAttack")
+	playVFX("PreHeavy")
+	playSFX("HeavyAttackWhoosh")
+
+	-- Create larger hitbox with delay (windup)
+	task.delay(0.3, function() -- Longer windup for heavy
+		createHitbox(Vector3.new(7, 7, 7), 0.3, currentWeapon.Damage.HeavyAttack, "Heavy")
+	end)
+
+	-- End attack
+	task.delay(currentWeapon.AttackSpeed.HeavyAttack, function()
+		isAttacking = false
+	end)
+
+	-- Notify server
+	AttackEvent:FireServer("Heavy", 1)
+
+	print("Heavy attack performed!")
+end
+
+-- Handle input
+local function onInputBegan(input, gameProcessed)
+	if gameProcessed then return end
+
+	-- Left mouse button = Light attack
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		performLightAttack()
+	end
+
+	-- Right mouse button = Heavy attack
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		performHeavyAttack()
+	end
+
+	-- Ability inputs (Tier 1/2/3) - also require weapon
+	if input.KeyCode == Enum.KeyCode.One then
+		if hasWeaponEquipped() then
+			print("Passive ability - always active (Tier 1)")
+		end
+	end
+
+	if input.KeyCode == Enum.KeyCode.Two then
+		if not hasWeaponEquipped() then
+			print("No weapon equipped!")
+			return
+		end
+
+		if abilityTier2Cooldown <= 0 then
+			print("Ability activated! (Tier 2)")
+			-- TODO: Implement Tier 2 ability effect
+			abilityTier2Cooldown = currentWeapon.Ability.Cooldown
+		else
+			print("Ability on cooldown:", abilityTier2Cooldown, "seconds")
+		end
+	end
+
+	if input.KeyCode == Enum.KeyCode.Three then
+		if not hasWeaponEquipped() then
+			print("No weapon equipped!")
+			return
+		end
+
+		if abilityTier3Cooldown <= 0 then
+			print("Ultimate activated! (Tier 3)")
+			-- TODO: Implement Tier 3 ultimate effect
+			abilityTier3Cooldown = currentWeapon.Ultimate.Cooldown
+		else
+			print("Ultimate on cooldown:", abilityTier3Cooldown, "seconds")
+		end
+	end
+end
+
+-- Update cooldowns
+local function updateCooldowns(deltaTime)
+	if abilityTier2Cooldown > 0 then
+		abilityTier2Cooldown = math.max(0, abilityTier2Cooldown - deltaTime)
+	end
+
+	if abilityTier3Cooldown > 0 then
+		abilityTier3Cooldown = math.max(0, abilityTier3Cooldown - deltaTime)
+	end
+end
+
+-- Equip weapon (called when Tool is equipped)
+local function equipWeapon(tool)
+	-- Get weapon name from tool
+	local weaponName = tool:GetAttribute("WeaponName") or "StarterFists"
+
+	-- Load weapon data
+	currentWeapon = WeaponData.GetWeapon(weaponName)
+	equippedTool = tool
+
+	if currentWeapon then
+		print("Equipped weapon:", currentWeapon.Name)
+
+		-- Reset combat state
+		isAttacking = false
+		comboCount = 0
+
+		-- Update LoadoutDisplay
+		local equippedWeaponValue = character:FindFirstChild("EquippedWeapon")
+		if equippedWeaponValue then
+			equippedWeaponValue.Value = currentWeapon.IconId
+		end
+
+		-- Update current slot display (Primary or Secondary)
+		local currentSlotValue = character:FindFirstChild("CurrentSlot")
+		if currentSlotValue then
+			-- Determine slot based on weapon name
+			if weaponName == "StarterFists" then
+				currentSlotValue.Value = "Primary"
+			elseif weaponName == "Firecracker" then
+				currentSlotValue.Value = "Secondary"
+			end
+		end
+	else
+		warn("Weapon data not found for:", weaponName)
+	end
+end
+
+-- Unequip weapon (called when Tool is unequipped)
+local function unequipWeapon()
+	if currentWeapon then
+		print("Unequipped weapon:", currentWeapon.Name)
+	end
+
+	currentWeapon = nil
+	equippedTool = nil
+
+	-- Reset combat state
+	isAttacking = false
+	comboCount = 0
+
+	-- Update LoadoutDisplay
+	local equippedWeaponValue = character:FindFirstChild("EquippedWeapon")
+	if equippedWeaponValue then
+		equippedWeaponValue.Value = ""
+	end
+end
+
+-- Monitor character for Tool equip/unequip
+local function monitorTools()
+	-- Listen for tool equipped
+	character.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			equipWeapon(child)
+		end
+	end)
+
+	-- Listen for tool unequipped
+	character.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") and child == equippedTool then
+			unequipWeapon()
+		end
+	end)
+
+	-- Check if tool is already equipped
+	local existingTool = character:FindFirstChildOfClass("Tool")
+	if existingTool then
+		equipWeapon(existingTool)
+	end
+end
+
+-- Setup
+local function setup()
+	UserInputService.InputBegan:Connect(onInputBegan)
+	RunService.Heartbeat:Connect(updateCooldowns)
+	monitorTools()
+
+	print("CombatController initialized!")
+	print("Controls: Left Click = Light Attack, Right Click = Heavy Attack, 1/2/3 = Abilities")
+	print("Note: You must have a weapon equipped to attack!")
+end
+
+setup()
+
+-- Export for other scripts
+return {
+	GetCurrentWeapon = function() return currentWeapon end,
+	IsAttacking = function() return isAttacking end,
+	HasWeaponEquipped = hasWeaponEquipped,
+}
+
+-- LocalScript: StarterGui>ScreenGui>StaminaFrame>StaminaGui
+-- StaminaGui.lua [LocalScript]
+-- Displays stamina bar in Bottom Center of screen
+-- Place in StarterGui > ScreenGui > StaminaFrame
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- Stamina tracking variables (mirrored from CharacterController)
+local currentStamina = 100
+local maxStamina = 100
+
+-- Create a NumberValue in the character to track stamina (set by CharacterController)
+local staminaValue = character:FindFirstChild("StaminaValue")
+if not staminaValue then
+	staminaValue = Instance.new("NumberValue")
+	staminaValue.Name = "StaminaValue"
+	staminaValue.Value = maxStamina
+	staminaValue.Parent = character
+end
+
+local maxStaminaValue = character:FindFirstChild("MaxStaminaValue")
+if not maxStaminaValue then
+	maxStaminaValue = Instance.new("NumberValue")
+	maxStaminaValue.Name = "MaxStaminaValue"
+	maxStaminaValue.Value = maxStamina
+	maxStaminaValue.Parent = character
+end
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+screenGui.IgnoreGuiInset = true
+
+local staminaFrame = script.Parent -- StaminaFrame
+staminaFrame.Size = UDim2.new(1, 0, 1, 0)
+staminaFrame.AnchorPoint = Vector2.new(0, 0)
+staminaFrame.Position = UDim2.new(0, 0, 0, 0)
+staminaFrame.BackgroundTransparency = 1
+
+-- Create stamina bar elements if they don't exist
+local staminaBarBackground = staminaFrame:FindFirstChild("StaminaBarBackground")
+if not staminaBarBackground then
+	staminaBarBackground = Instance.new("Frame")
+	staminaBarBackground.Name = "StaminaBarBackground"
+	staminaBarBackground.Size = UDim2.new(0, 320, 0, 20)
+	staminaBarBackground.Position = UDim2.new(0.5, 0, 1, -60)
+	staminaBarBackground.AnchorPoint = Vector2.new(0.5, 1)
+	staminaBarBackground.BackgroundColor3 = Color3.fromRGB(20, 20, 20) -- Darker background
+	staminaBarBackground.BorderSizePixel = 0 -- No border for minimalist look
+	staminaBarBackground.Parent = staminaFrame
+
+	-- Add rounded corners
+	local bgCorner = Instance.new("UICorner")
+	bgCorner.CornerRadius = UDim.new(0, 6) -- 6px rounded corners
+	bgCorner.Parent = staminaBarBackground
+end
+
+local staminaBar = staminaBarBackground:FindFirstChild("StaminaBar")
+if not staminaBar then
+	staminaBar = Instance.new("Frame")
+	staminaBar.Name = "StaminaBar"
+	staminaBar.Size = UDim2.new(1, 0, 1, 0)
+	staminaBar.Position = UDim2.new(0, 0, 0, 0)
+	staminaBar.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Green by default
+	staminaBar.BorderSizePixel = 0
+	staminaBar.Parent = staminaBarBackground
+
+	-- Add rounded corners to stamina bar
+	local barCorner = Instance.new("UICorner")
+	barCorner.CornerRadius = UDim.new(0, 6) -- 6px rounded corners
+	barCorner.Parent = staminaBar
+end
+
+local staminaLabel = staminaBarBackground:FindFirstChild("StaminaLabel")
+if not staminaLabel then
+	staminaLabel = Instance.new("TextLabel")
+	staminaLabel.Name = "StaminaLabel"
+	staminaLabel.Size = UDim2.new(1, -12, 1, 0)
+	staminaLabel.Position = UDim2.new(0, 6, 0, 0)
+	staminaLabel.BackgroundTransparency = 1
+	staminaLabel.Text = "STAMINA: 100/100"
+	staminaLabel.TextColor3 = Color3.fromRGB(220, 220, 220) -- Slightly darker white
+	staminaLabel.TextSize = 12 -- Smaller, more minimalist
+	staminaLabel.Font = Enum.Font.Gotham -- Cleaner font
+	staminaLabel.TextStrokeTransparency = 0.7 -- Subtle stroke
+	staminaLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	staminaLabel.TextXAlignment = Enum.TextXAlignment.Center
+	staminaLabel.ZIndex = 2
+	staminaLabel.Parent = staminaBarBackground
+end
+
+-- Stamina color thresholds (from GameConfig)
+local function getStaminaColor(percentage)
+	if percentage > 0.6 then
+		return Color3.fromRGB(0, 255, 0) -- Green
+	elseif percentage > 0.3 then
+		return Color3.fromRGB(255, 255, 0) -- Yellow
+	else
+		return Color3.fromRGB(255, 0, 0) -- Red
+	end
+end
+
+-- Update stamina bar
+local function updateStaminaBar()
+	-- Read from character's stamina values
+	currentStamina = staminaValue.Value
+	maxStamina = maxStaminaValue.Value
+
+	local percentage = currentStamina / maxStamina
+
+	-- Update bar size
+	staminaBar.Size = UDim2.new(percentage, 0, 1, 0)
+
+	-- Update bar color based on percentage
+	staminaBar.BackgroundColor3 = getStaminaColor(percentage)
+
+	-- Update label text
+	staminaLabel.Text = string.format("STAMINA: %d/%d", math.floor(currentStamina), maxStamina)
+end
+
+-- Connect to RenderStepped for smooth updates
+RunService.RenderStepped:Connect(updateStaminaBar)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+	humanoid = character:WaitForChild("Humanoid")
+
+	-- Wait for stamina values to be created
+	staminaValue = character:WaitForChild("StaminaValue", 10)
+	maxStaminaValue = character:WaitForChild("MaxStaminaValue", 10)
+
+	if not staminaValue then
+		staminaValue = Instance.new("NumberValue")
+		staminaValue.Name = "StaminaValue"
+		staminaValue.Value = 100
+		staminaValue.Parent = character
+	end
+
+	if not maxStaminaValue then
+		maxStaminaValue = Instance.new("NumberValue")
+		maxStaminaValue.Name = "MaxStaminaValue"
+		maxStaminaValue.Value = 100
+		maxStaminaValue.Parent = character
+	end
+end)
+
+print("StaminaGui initialized for:", player.Name)
+
+-- LocalScript: StarterGui>ScreenGui>VitalsFrame>HPBar
+-- HPBar.lua [LocalScript]
+-- Displays HP bar in Bottom Center of screen (above stamina bar)
+-- Place in StarterGui > ScreenGui > VitalsFrame
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+screenGui.IgnoreGuiInset = true
+
+local vitalsFrame = script.Parent -- VitalsFrame
+vitalsFrame.Size = UDim2.new(1, 0, 1, 0)
+vitalsFrame.BackgroundTransparency = 1
+
+-- Create HP bar elements if they don't exist
+local hpBarBackground = vitalsFrame:FindFirstChild("HPBarBackground")
+if not hpBarBackground then
+	hpBarBackground = Instance.new("Frame")
+	hpBarBackground.Name = "HPBarBackground"
+	hpBarBackground.Size = UDim2.new(0, 320, 0, 20)
+	hpBarBackground.Position = UDim2.new(0.5, 0, 1, -100)
+	hpBarBackground.AnchorPoint = Vector2.new(0.5, 1)
+	hpBarBackground.BackgroundColor3 = Color3.fromRGB(20, 20, 20) -- Dark background
+	hpBarBackground.BorderSizePixel = 0
+	hpBarBackground.Parent = vitalsFrame
+
+	-- Add rounded corners
+	local bgCorner = Instance.new("UICorner")
+	bgCorner.CornerRadius = UDim.new(0, 6)
+	bgCorner.Parent = hpBarBackground
+end
+
+local hpBar = hpBarBackground:FindFirstChild("HPBar")
+if not hpBar then
+	hpBar = Instance.new("Frame")
+	hpBar.Name = "HPBar"
+	hpBar.Size = UDim2.new(1, 0, 1, 0)
+	hpBar.Position = UDim2.new(0, 0, 0, 0)
+	hpBar.BackgroundColor3 = Color3.fromRGB(255, 50, 50) -- Red
+	hpBar.BorderSizePixel = 0
+	hpBar.Parent = hpBarBackground
+
+	-- Add rounded corners
+	local barCorner = Instance.new("UICorner")
+	barCorner.CornerRadius = UDim.new(0, 6)
+	barCorner.Parent = hpBar
+end
+
+local hpLabel = hpBarBackground:FindFirstChild("HPLabel")
+if not hpLabel then
+	hpLabel = Instance.new("TextLabel")
+	hpLabel.Name = "HPLabel"
+	hpLabel.Size = UDim2.new(1, -12, 1, 0)
+	hpLabel.Position = UDim2.new(0, 6, 0, 0)
+	hpLabel.BackgroundTransparency = 1
+	hpLabel.Text = "HP: 100/100"
+	hpLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	hpLabel.TextSize = 12
+	hpLabel.Font = Enum.Font.Gotham
+	hpLabel.TextStrokeTransparency = 0.7
+	hpLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	hpLabel.TextXAlignment = Enum.TextXAlignment.Center
+	hpLabel.ZIndex = 2
+	hpLabel.Parent = hpBarBackground
+end
+
+-- Update HP bar
+local function updateHPBar()
+	local currentHP = humanoid.Health
+	local maxHP = humanoid.MaxHealth
+	local percentage = currentHP / math.max(maxHP, 1)
+
+	-- Update bar size
+	hpBar.Size = UDim2.new(percentage, 0, 1, 0)
+
+	-- Update label text
+	hpLabel.Text = string.format("HP: %d/%d", math.floor(currentHP), math.floor(maxHP))
+end
+
+-- Connect to health changes
+humanoid.HealthChanged:Connect(updateHPBar)
+
+-- Connect to RenderStepped for smooth updates
+RunService.RenderStepped:Connect(updateHPBar)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+	humanoid = character:WaitForChild("Humanoid")
+
+	-- Reconnect health changed
+	humanoid.HealthChanged:Connect(updateHPBar)
+end)
+
+-- Initial update
+updateHPBar()
+
+print("HPBar initialized for:", player.Name)
+
+-- LocalScript: StarterGui>ScreenGui>VitalsFrame>KOShields
+-- KOShields.lua [LocalScript]
+-- Displays KO shields indicator in Bottom Center
+-- Place in StarterGui > ScreenGui > VitalsFrame
+
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+screenGui.IgnoreGuiInset = true
+
+local vitalsFrame = script.Parent -- VitalsFrame
+vitalsFrame.Size = UDim2.new(1, 0, 1, 0)
+vitalsFrame.BackgroundTransparency = 1
+
+-- KO Shields configuration
+local maxShields = 3 -- Default number of KO shields
+
+-- Create KO shields container
+local shieldsContainer = vitalsFrame:FindFirstChild("KOShieldsContainer")
+if not shieldsContainer then
+	shieldsContainer = Instance.new("Frame")
+	shieldsContainer.Name = "KOShieldsContainer"
+	shieldsContainer.Size = UDim2.new(0, 320, 0, 24)
+	shieldsContainer.Position = UDim2.new(0.5, 0, 1, -20)
+	shieldsContainer.AnchorPoint = Vector2.new(0.5, 1)
+	shieldsContainer.BackgroundTransparency = 1
+	shieldsContainer.Parent = vitalsFrame
+end
+
+-- Create label
+local shieldsLabel = shieldsContainer:FindFirstChild("ShieldsLabel")
+if not shieldsLabel then
+	shieldsLabel = Instance.new("TextLabel")
+	shieldsLabel.Name = "ShieldsLabel"
+	shieldsLabel.Size = UDim2.new(0, 120, 1, 0)
+	shieldsLabel.Position = UDim2.new(0, 0, 0, 0)
+	shieldsLabel.BackgroundTransparency = 1
+	shieldsLabel.Text = "KO SHIELDS"
+	shieldsLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	shieldsLabel.TextSize = 12
+	shieldsLabel.Font = Enum.Font.Gotham
+	shieldsLabel.TextXAlignment = Enum.TextXAlignment.Left
+	shieldsLabel.TextStrokeTransparency = 0.7
+	shieldsLabel.Parent = shieldsContainer
+end
+
+-- Create shield indicators container
+local shieldIconsFrame = shieldsContainer:FindFirstChild("ShieldIconsFrame")
+if not shieldIconsFrame then
+	shieldIconsFrame = Instance.new("Frame")
+	shieldIconsFrame.Name = "ShieldIconsFrame"
+	shieldIconsFrame.Size = UDim2.new(0, 120, 1, 0)
+	shieldIconsFrame.Position = UDim2.new(0, 130, 0, 0)
+	shieldIconsFrame.BackgroundTransparency = 1
+	shieldIconsFrame.Parent = shieldsContainer
+end
+
+-- Create shield icons
+local shieldIcons = {}
+for i = 1, maxShields do
+	local shieldIcon = shieldIconsFrame:FindFirstChild("Shield" .. i)
+	if not shieldIcon then
+		shieldIcon = Instance.new("Frame")
+		shieldIcon.Name = "Shield" .. i
+		shieldIcon.Size = UDim2.new(0, 18, 0, 18)
+		shieldIcon.Position = UDim2.new(0, (i - 1) * 30, 0.5, 0)
+		shieldIcon.AnchorPoint = Vector2.new(0, 0.5)
+		shieldIcon.BackgroundColor3 = Color3.fromRGB(100, 200, 255) -- Blue shield color
+		shieldIcon.BorderSizePixel = 0
+		shieldIcon.Parent = shieldIconsFrame
+
+		local shieldCorner = Instance.new("UICorner")
+		shieldCorner.CornerRadius = UDim.new(1, 0) -- Fully round
+		shieldCorner.Parent = shieldIcon
+
+		-- Inner circle for visual effect
+		local innerCircle = Instance.new("Frame")
+		innerCircle.Name = "InnerCircle"
+		innerCircle.Size = UDim2.new(0.6, 0, 0.6, 0)
+		innerCircle.Position = UDim2.new(0.5, 0, 0.5, 0)
+		innerCircle.AnchorPoint = Vector2.new(0.5, 0.5)
+		innerCircle.BackgroundColor3 = Color3.fromRGB(150, 220, 255)
+		innerCircle.BorderSizePixel = 0
+		innerCircle.Parent = shieldIcon
+
+		local innerCorner = Instance.new("UICorner")
+		innerCorner.CornerRadius = UDim.new(1, 0)
+		innerCorner.Parent = innerCircle
+	end
+
+	table.insert(shieldIcons, shieldIcon)
+end
+
+-- Update shield display
+local function updateShields()
+	-- Get current shield count from character
+	local shieldValue = character:FindFirstChild("KOShieldsValue")
+	local currentShields = shieldValue and shieldValue.Value or maxShields
+
+	for i = 1, maxShields do
+		local icon = shieldIcons[i]
+		if icon then
+			local innerCircle = icon:FindFirstChild("InnerCircle")
+			if i <= currentShields then
+				-- Shield is active
+				icon.BackgroundTransparency = 0
+				icon.BackgroundColor3 = Color3.fromRGB(100, 200, 255)
+				if innerCircle then
+					innerCircle.BackgroundTransparency = 0
+				end
+			else
+				-- Shield is depleted
+				icon.BackgroundTransparency = 0.7
+				icon.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+				if innerCircle then
+					innerCircle.BackgroundTransparency = 0.9
+				end
+			end
+		end
+	end
+end
+
+-- Create KO shields value in character
+local shieldValue = character:FindFirstChild("KOShieldsValue")
+if not shieldValue then
+	shieldValue = Instance.new("IntValue")
+	shieldValue.Name = "KOShieldsValue"
+	shieldValue.Value = maxShields
+	shieldValue.Parent = character
+end
+
+-- Connect to shield changes
+shieldValue.Changed:Connect(updateShields)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+
+	-- Wait for shield value
+	shieldValue = character:WaitForChild("KOShieldsValue", 10)
+	if not shieldValue then
+		shieldValue = Instance.new("IntValue")
+		shieldValue.Name = "KOShieldsValue"
+		shieldValue.Value = maxShields
+		shieldValue.Parent = character
+	end
+
+	shieldValue.Changed:Connect(updateShields)
+	updateShields()
+end)
+
+-- Initial update
+updateShields()
+
+print("KOShields initialized for:", player.Name)
+print("Note: KO shield system is placeholder - will integrate with combat system later")
+
+-- LocalScript: StarterGui>ScreenGui>LoadoutFrame>LoadoutDisplay
+-- LoadoutDisplay.lua [LocalScript] - CORRECT VERSION
+-- Displays currently equipped primary weapon and secondary cosmetic
+-- Place in StarterGui > ScreenGui > LoadoutFrame
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+local loadoutFrame = script.Parent -- LoadoutFrame
+
+-- Ensure parent frame is fullscreen and transparent
+loadoutFrame.Size = UDim2.new(1, 0, 1, 0) -- Fullscreen
+loadoutFrame.Position = UDim2.new(0, 0, 0, 0) -- Top-left
+loadoutFrame.BackgroundTransparency = 1 -- Invisible
+
+-- Create primary weapon display (large square) - More compact
+local primaryWeaponDisplay = Instance.new("Frame")
+primaryWeaponDisplay.Name = "PrimaryWeaponDisplay"
+primaryWeaponDisplay.Size = UDim2.new(0, 60, 0, 60) -- Reduced from 80x80
+primaryWeaponDisplay.Position = UDim2.new(1, -20, 1, -20) -- Bottom right with margin
+primaryWeaponDisplay.AnchorPoint = Vector2.new(1, 1) -- Anchor to bottom-right corner
+primaryWeaponDisplay.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+primaryWeaponDisplay.BorderSizePixel = 0
+primaryWeaponDisplay.Parent = loadoutFrame
+
+local primaryCorner = Instance.new("UICorner")
+primaryCorner.CornerRadius = UDim.new(0, 6)
+primaryCorner.Parent = primaryWeaponDisplay
+
+-- Primary weapon icon (placeholder)
+local primaryIcon = Instance.new("ImageLabel")
+primaryIcon.Name = "PrimaryIcon"
+primaryIcon.Size = UDim2.new(0.8, 0, 0.8, 0)
+primaryIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+primaryIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+primaryIcon.BackgroundTransparency = 1
+primaryIcon.Image = "" -- Will be set by weapon system
+primaryIcon.ImageColor3 = Color3.fromRGB(200, 200, 200)
+primaryIcon.Parent = primaryWeaponDisplay
+
+-- Primary weapon label
+local primaryLabel = Instance.new("TextLabel")
+primaryLabel.Name = "PrimaryLabel"
+primaryLabel.Size = UDim2.new(1, 0, 0, 15)
+primaryLabel.Position = UDim2.new(0, 0, 1, 2)
+primaryLabel.BackgroundTransparency = 1
+primaryLabel.Text = "PRIMARY"
+primaryLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+primaryLabel.TextSize = 9
+primaryLabel.Font = Enum.Font.Gotham
+primaryLabel.TextStrokeTransparency = 0.7
+primaryLabel.Parent = primaryWeaponDisplay
+
+-- Keybind indicator (T key)
+local primaryKeybind = Instance.new("TextLabel")
+primaryKeybind.Name = "PrimaryKeybind"
+primaryKeybind.Size = UDim2.new(0, 20, 0, 20)
+primaryKeybind.Position = UDim2.new(0, 5, 0, 5)
+primaryKeybind.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+primaryKeybind.BorderSizePixel = 0
+primaryKeybind.Text = "T"
+primaryKeybind.TextColor3 = Color3.fromRGB(220, 220, 220)
+primaryKeybind.TextSize = 12
+primaryKeybind.Font = Enum.Font.GothamBold
+primaryKeybind.Parent = primaryWeaponDisplay
+
+local keybindCorner = Instance.new("UICorner")
+keybindCorner.CornerRadius = UDim.new(0, 4)
+keybindCorner.Parent = primaryKeybind
+
+-- Create secondary cosmetic display (small square) - More compact
+local secondaryDisplay = Instance.new("Frame")
+secondaryDisplay.Name = "SecondaryDisplay"
+secondaryDisplay.Size = UDim2.new(0, 50, 0, 50) -- Slightly smaller
+secondaryDisplay.Position = UDim2.new(0, -10, 0.5, 0) -- Closer to primary (was -60)
+secondaryDisplay.AnchorPoint = Vector2.new(1, 0.5) -- Anchor to right-center
+secondaryDisplay.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+secondaryDisplay.BorderSizePixel = 0
+secondaryDisplay.Parent = primaryWeaponDisplay
+
+local secondaryCorner = Instance.new("UICorner")
+secondaryCorner.CornerRadius = UDim.new(0, 6)
+secondaryCorner.Parent = secondaryDisplay
+
+-- Secondary cosmetic icon (placeholder)
+local secondaryIcon = Instance.new("ImageLabel")
+secondaryIcon.Name = "SecondaryIcon"
+secondaryIcon.Size = UDim2.new(0.8, 0, 0.8, 0)
+secondaryIcon.Position = UDim2.new(0.5, 0, 0.5, 0)
+secondaryIcon.AnchorPoint = Vector2.new(0.5, 0.5)
+secondaryIcon.BackgroundTransparency = 1
+secondaryIcon.Image = "" -- Will be set by cosmetic system
+secondaryIcon.ImageColor3 = Color3.fromRGB(200, 200, 200)
+secondaryIcon.Parent = secondaryDisplay
+
+-- Secondary label
+local secondaryLabel = Instance.new("TextLabel")
+secondaryLabel.Name = "SecondaryLabel"
+secondaryLabel.Size = UDim2.new(1, 0, 0, 12)
+secondaryLabel.Position = UDim2.new(0, 0, 1, 2)
+secondaryLabel.BackgroundTransparency = 1
+secondaryLabel.Text = "COSMETIC"
+secondaryLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+secondaryLabel.TextSize = 8
+secondaryLabel.Font = Enum.Font.Gotham
+secondaryLabel.TextStrokeTransparency = 0.7
+secondaryLabel.Parent = secondaryDisplay
+
+-- Placeholder text when no weapon equipped
+local noWeaponText = Instance.new("TextLabel")
+noWeaponText.Name = "NoWeaponText"
+noWeaponText.Size = UDim2.new(1, 0, 1, 0)
+noWeaponText.Position = UDim2.new(0, 0, 0, 0)
+noWeaponText.BackgroundTransparency = 1
+noWeaponText.Text = "?"
+noWeaponText.TextColor3 = Color3.fromRGB(100, 100, 100)
+noWeaponText.TextSize = 36
+noWeaponText.Font = Enum.Font.GothamBold
+noWeaponText.Parent = primaryIcon
+
+-- Active weapon indicator (border highlight)
+local activeIndicator = Instance.new("UIStroke")
+activeIndicator.Name = "ActiveIndicator"
+activeIndicator.Thickness = 3
+activeIndicator.Color = Color3.fromRGB(100, 255, 100) -- Green
+activeIndicator.Transparency = 1 -- Hidden by default
+activeIndicator.Parent = primaryWeaponDisplay
+
+-- Secondary active indicator
+local secondaryActiveIndicator = Instance.new("UIStroke")
+secondaryActiveIndicator.Name = "ActiveIndicator"
+secondaryActiveIndicator.Thickness = 3
+secondaryActiveIndicator.Color = Color3.fromRGB(100, 255, 100)
+secondaryActiveIndicator.Transparency = 1
+secondaryActiveIndicator.Parent = secondaryDisplay
+
+-- Update loadout display based on equipped items
+local function updateLoadout()
+	-- Check for equipped weapon data in character
+	local equippedWeapon = character:FindFirstChild("EquippedWeapon")
+	local equippedCosmetic = character:FindFirstChild("EquippedCosmetic")
+
+	-- Check which slot is active
+	local currentSlot = character:FindFirstChild("CurrentSlot")
+	if currentSlot then
+		if currentSlot.Value == "Primary" then
+			activeIndicator.Transparency = 0 -- Show primary border
+			secondaryActiveIndicator.Transparency = 1 -- Hide secondary border
+		elseif currentSlot.Value == "Secondary" then
+			activeIndicator.Transparency = 1 -- Hide primary border
+			secondaryActiveIndicator.Transparency = 0 -- Show secondary border
+		end
+	end
+
+	if equippedWeapon and equippedWeapon.Value ~= "" then
+		primaryIcon.Image = equippedWeapon.Value
+		noWeaponText.Visible = false
+	else
+		primaryIcon.Image = ""
+		noWeaponText.Visible = true
+	end
+
+	if equippedCosmetic and equippedCosmetic.Value ~= "" then
+		secondaryIcon.Image = equippedCosmetic.Value
+	else
+		secondaryIcon.Image = ""
+	end
+end
+
+-- Create placeholder values for weapon/cosmetic
+local equippedWeapon = character:FindFirstChild("EquippedWeapon")
+if not equippedWeapon then
+	equippedWeapon = Instance.new("StringValue")
+	equippedWeapon.Name = "EquippedWeapon"
+	equippedWeapon.Value = ""
+	equippedWeapon.Parent = character
+end
+
+local equippedCosmetic = character:FindFirstChild("EquippedCosmetic")
+if not equippedCosmetic then
+	equippedCosmetic = Instance.new("StringValue")
+	equippedCosmetic.Name = "EquippedCosmetic"
+	equippedCosmetic.Value = ""
+	equippedCosmetic.Parent = character
+end
+
+-- Track current slot (Primary/Secondary)
+local currentSlot = character:FindFirstChild("CurrentSlot")
+if not currentSlot then
+	currentSlot = Instance.new("StringValue")
+	currentSlot.Name = "CurrentSlot"
+	currentSlot.Value = "Primary"
+	currentSlot.Parent = character
+end
+
+-- Connect to changes
+equippedWeapon.Changed:Connect(updateLoadout)
+equippedCosmetic.Changed:Connect(updateLoadout)
+currentSlot.Changed:Connect(updateLoadout)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+
+	-- Wait for values
+	equippedWeapon = character:WaitForChild("EquippedWeapon", 10)
+	equippedCosmetic = character:WaitForChild("EquippedCosmetic", 10)
+	currentSlot = character:WaitForChild("CurrentSlot", 10)
+
+	if equippedWeapon then
+		equippedWeapon.Changed:Connect(updateLoadout)
+	end
+	if equippedCosmetic then
+		equippedCosmetic.Changed:Connect(updateLoadout)
+	end
+	if currentSlot then
+		currentSlot.Changed:Connect(updateLoadout)
+	end
+
+	updateLoadout()
+end)
+
+-- Initial update
+updateLoadout()
+
+print("LoadoutDisplay initialized for:", player.Name)
+print("Note: Weapon/cosmetic system is placeholder - will integrate with weapon system later")
+
+-- LocalScript: StarterGui>ScreenGui>TierBarFrame>TierBar
+-- TierBar.lua [LocalScript]
+-- Displays Sol Dust progression and weapon tier unlocks
+-- Place in StarterGui > ScreenGui > TierBarFrame
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+local tierBarFrame = script.Parent -- TierBarFrame
+
+-- Ensure parent frame is fullscreen and transparent
+tierBarFrame.Size = UDim2.new(1, 0, 1, 0) -- Fullscreen
+tierBarFrame.Position = UDim2.new(0, 0, 0, 0) -- Top-left
+tierBarFrame.BackgroundTransparency = 1 -- Invisible
+
+-- Tier configuration (from GameConfig)
+local tierThresholds = {
+	[1] = 0,   -- Passive (always unlocked)
+	[2] = 100, -- Ability
+	[3] = 250  -- Ultimate
+}
+
+local tierNames = {
+	[1] = "PASSIVE",
+	[2] = "ABILITY",
+	[3] = "ULTIMATE"
+}
+
+local tierKeys = {
+	[1] = "1",
+	[2] = "2",
+	[3] = "3"
+}
+
+-- Track Sol Dust (placeholder until weapon system is implemented)
+local currentSolDust = 0
+
+-- Create tier bar container
+local tierBarContainer = Instance.new("Frame")
+tierBarContainer.Name = "TierBarContainer"
+tierBarContainer.Size = UDim2.new(0, 360, 0, 70)
+tierBarContainer.Position = UDim2.new(0, 20, 1, -20) -- Bottom left with margin
+tierBarContainer.AnchorPoint = Vector2.new(0, 1) -- Anchor to bottom-left corner
+tierBarContainer.BackgroundTransparency = 1
+tierBarContainer.Parent = tierBarFrame
+
+-- Create individual tier slots
+local tierSlots = {}
+
+for i = 1, 3 do
+	-- Slot background
+	local slot = Instance.new("Frame")
+	slot.Name = "TierSlot" .. i
+	slot.Size = UDim2.new(0, 110, 0, 70)
+	slot.Position = UDim2.new(0, (i-1) * 120, 0, 0)
+	slot.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	slot.BorderSizePixel = 0
+	slot.Parent = tierBarContainer
+
+	local slotCorner = Instance.new("UICorner")
+	slotCorner.CornerRadius = UDim.new(0, 6)
+	slotCorner.Parent = slot
+
+	-- Tier name label
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, 0, 0, 15)
+	nameLabel.Position = UDim2.new(0, 0, 0, 5)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = tierNames[i]
+	nameLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+	nameLabel.TextSize = 10
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.Parent = slot
+
+	-- Progress bar background
+	local progressBg = Instance.new("Frame")
+	progressBg.Name = "ProgressBackground"
+	progressBg.Size = UDim2.new(0.9, 0, 0, 8)
+	progressBg.Position = UDim2.new(0.05, 0, 0, 25)
+	progressBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	progressBg.BorderSizePixel = 0
+	progressBg.Parent = slot
+
+	local progressBgCorner = Instance.new("UICorner")
+	progressBgCorner.CornerRadius = UDim.new(0, 4)
+	progressBgCorner.Parent = progressBg
+
+	-- Progress bar fill
+	local progressFill = Instance.new("Frame")
+	progressFill.Name = "ProgressFill"
+	progressFill.Size = UDim2.new(0, 0, 1, 0)
+	progressFill.Position = UDim2.new(0, 0, 0, 0)
+	progressFill.BackgroundColor3 = Color3.fromRGB(255, 200, 50) -- Gold color for Sol Dust
+	progressFill.BorderSizePixel = 0
+	progressFill.Parent = progressBg
+
+	local progressFillCorner = Instance.new("UICorner")
+	progressFillCorner.CornerRadius = UDim.new(0, 4)
+	progressFillCorner.Parent = progressFill
+
+	-- Keybind indicator
+	local keybindLabel = Instance.new("TextLabel")
+	keybindLabel.Name = "KeybindLabel"
+	keybindLabel.Size = UDim2.new(0, 30, 0, 30)
+	keybindLabel.Position = UDim2.new(0.5, 0, 1, -35)
+	keybindLabel.AnchorPoint = Vector2.new(0.5, 0)
+	keybindLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	keybindLabel.BorderSizePixel = 0
+	keybindLabel.Text = tierKeys[i]
+	keybindLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+	keybindLabel.TextSize = 16
+	keybindLabel.Font = Enum.Font.GothamBold
+	keybindLabel.Parent = slot
+
+	local keybindCorner = Instance.new("UICorner")
+	keybindCorner.CornerRadius = UDim.new(0, 4)
+	keybindCorner.Parent = keybindLabel
+
+	-- Status label (LOCKED/UNLOCKED)
+	local statusLabel = Instance.new("TextLabel")
+	statusLabel.Name = "StatusLabel"
+	statusLabel.Size = UDim2.new(1, 0, 0, 12)
+	statusLabel.Position = UDim2.new(0, 0, 0, 38)
+	statusLabel.BackgroundTransparency = 1
+	statusLabel.Text = "LOCKED"
+	statusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+	statusLabel.TextSize = 9
+	statusLabel.Font = Enum.Font.Gotham
+	statusLabel.Parent = slot
+
+	tierSlots[i] = {
+		Slot = slot,
+		ProgressFill = progressFill,
+		StatusLabel = statusLabel,
+		KeybindLabel = keybindLabel
+	}
+end
+
+-- Update tier bar based on Sol Dust
+local function updateTierBar()
+	for i = 1, 3 do
+		local slot = tierSlots[i]
+		local threshold = tierThresholds[i]
+		local nextThreshold = tierThresholds[i + 1] or 999999
+
+		if currentSolDust >= threshold then
+			-- Tier is unlocked
+			slot.StatusLabel.Text = "UNLOCKED"
+			slot.StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+
+			-- Calculate progress to next tier
+			if i < 3 then
+				local progress = (currentSolDust - threshold) / (nextThreshold - threshold)
+				progress = math.clamp(progress, 0, 1)
+				slot.ProgressFill.Size = UDim2.new(progress, 0, 1, 0)
+			else
+				-- Max tier
+				slot.ProgressFill.Size = UDim2.new(1, 0, 1, 0)
+			end
+		else
+			-- Tier is locked
+			slot.StatusLabel.Text = "LOCKED"
+			slot.StatusLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+
+			-- Show progress toward unlocking this tier
+			if i > 1 then
+				local prevThreshold = tierThresholds[i - 1]
+				local progress = (currentSolDust - prevThreshold) / (threshold - prevThreshold)
+				progress = math.clamp(progress, 0, 1)
+				slot.ProgressFill.Size = UDim2.new(progress, 0, 1, 0)
+			else
+				slot.ProgressFill.Size = UDim2.new(1, 0, 1, 0) -- Passive always shown as full
+			end
+		end
+	end
+end
+
+-- Listen for Sol Dust changes (placeholder - will connect to weapon system later)
+local function onSolDustChanged(newAmount)
+	currentSolDust = newAmount
+	updateTierBar()
+end
+
+-- Create Sol Dust value in character for testing
+local solDustValue = character:FindFirstChild("SolDustValue")
+if not solDustValue then
+	solDustValue = Instance.new("NumberValue")
+	solDustValue.Name = "SolDustValue"
+	solDustValue.Value = 0
+	solDustValue.Parent = character
+end
+
+-- Connect to Sol Dust changes
+solDustValue.Changed:Connect(function(value)
+	onSolDustChanged(value)
+end)
+
+-- Handle character respawn
+player.CharacterAdded:Connect(function(newCharacter)
+	character = newCharacter
+
+	-- Wait for Sol Dust value
+	solDustValue = character:WaitForChild("SolDustValue", 10)
+	if solDustValue then
+		solDustValue.Changed:Connect(function(value)
+			onSolDustChanged(value)
+		end)
+		currentSolDust = solDustValue.Value
+		updateTierBar()
+	end
+end)
+
+-- Initial update
+updateTierBar()
+
+print("TierBar initialized for:", player.Name)
+print("Note: Sol Dust system is placeholder - will integrate with weapon system later")
+
+-- LocalScript: StarterGui>ScreenGui>CooldownsFrame>ActionCooldowns
+-- ActionCooldowns.lua [LocalScript] — FINALIZED
+-- StarterGui > ScreenGui > CooldownsFrame
+-- Style matches Loadout HUD, sits directly to the left of Loadout cluster.
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+
+-- === Screen / Root Frame ==================================
+local screenGui = script.Parent.Parent -- ScreenGui
+screenGui.IgnoreGuiInset = true
+
+local cooldownsFrame = script.Parent -- CooldownsFrame
+cooldownsFrame.Size = UDim2.new(1, 0, 1, 0)
+cooldownsFrame.Position = UDim2.new(0, 0, 0, 0)
+cooldownsFrame.BackgroundTransparency = 1
+
+-- === Layout constants (mirror your Loadout cluster exactly) =
+local EDGE_MARGIN = 20
+
+-- Loadout sizes (from your LoadoutDisplay)
+local PRIMARY_W   = 90
+local SECONDARY_W = 60
+local GAP_P_S     = 6   -- UIListLayout padding inside Loadout
+
+-- Gap between Loadout cluster and cooldowns row
+local GAP_CLUSTER_TO_COOLDOWNS = 12
+
+-- Cooldown chip style (square, like your ability tiles in Loadout)
+local CHIP_W = 58
+local CHIP_H = 58
+local CHIP_CORNER = 6
+local CHIP_PAD = 8
+
+-- Right offset so our container's RIGHT edge sits just to the left of the Loadout cluster:
+-- [primary 90] + [gap 6] + [secondary 60] + [gutter 12] + [edge 20]
+local RIGHT_OFFSET = EDGE_MARGIN + PRIMARY_W + GAP_P_S + SECONDARY_W + GAP_CLUSTER_TO_COOLDOWNS
+local BOTTOM_OFFSET = EDGE_MARGIN
+
+-- === Abilities / cooldown config ===========================
+-- Neutral (black) icon look; no color tints. Durations are same as before.
+local order = { "Deflect", "Grapple", "Dodge" } -- left -> right (we align right, so Dodge ends up at the far right)
+local cooldownConfigs = {
+	Deflect = { KeyBind = "Q", Cooldown = 2.0 },
+	Grapple = { KeyBind = "E", Cooldown = 3.0 },
+	Dodge   = { KeyBind = "V", Cooldown = 1.0 },
+}
+
+-- (Optional) if you have images later, fill these:
+local iconImages = {
+	Deflect = "", -- e.g., "rbxassetid://<id>"
+	Grapple = "",
+	Dodge   = "",
+}
+
+-- === Build container =======================================
+local CONTAINER_W = (#order * CHIP_W) + ((#order - 1) * CHIP_PAD)
+local CONTAINER_H = CHIP_H
+
+local container = Instance.new("Frame")
+container.Name = "CooldownsContainer"
+container.Size = UDim2.new(0, CONTAINER_W, 0, CONTAINER_H)
+container.Position = UDim2.new(1, -RIGHT_OFFSET, 1, -BOTTOM_OFFSET)
+container.AnchorPoint = Vector2.new(1, 1)
+container.BackgroundTransparency = 1
+container.Parent = cooldownsFrame
+
+local list = Instance.new("UIListLayout")
+list.FillDirection = Enum.FillDirection.Horizontal
+list.HorizontalAlignment = Enum.HorizontalAlignment.Right
+list.VerticalAlignment = Enum.VerticalAlignment.Bottom
+list.Padding = UDim.new(0, CHIP_PAD)
+list.SortOrder = Enum.SortOrder.LayoutOrder
+list.Parent = container
+
+-- === Helpers ===============================================
+local function mkKeyBadge(parent, text)
+	local badge = Instance.new("TextLabel")
+	badge.Name = "KeyBadge"
+	badge.Size = UDim2.new(0, 22, 0, 22)
+	badge.Position = UDim2.new(0, 6, 0, 6)
+	badge.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	badge.BorderSizePixel = 0
+	badge.Text = text
+	badge.TextColor3 = Color3.fromRGB(220, 220, 220)
+	badge.TextSize = 12
+	badge.Font = Enum.Font.GothamBold
+	badge.ZIndex = 3
+	badge.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 4)
+	c.Parent = badge
+	return badge
+end
+
+local function mkBlink(parent)
+	local blink = Instance.new("Frame")
+	blink.Name = "Blink"
+	blink.Size = UDim2.new(0, 10, 0, 10)
+	blink.AnchorPoint = Vector2.new(0.5, 0.5)
+	blink.Position = UDim2.new(0.5, 0, 0.5, 0)
+	blink.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	blink.BorderSizePixel = 0
+	blink.Visible = false
+	blink.ZIndex = 5
+	blink.Parent = parent
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 2)
+	c.Parent = blink
+	return blink
+end
+
+-- === Chip factory (black icon, keybadge at TL, cooldown overlay, blink) ==
+local function createChip(name, layoutOrder)
+	local chip = Instance.new("Frame")
+	chip.Name = name .. "Chip"
+	chip.LayoutOrder = layoutOrder
+	chip.Size = UDim2.new(0, CHIP_W, 0, CHIP_H)
+	chip.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	chip.BorderSizePixel = 0
+	chip.Parent = container
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, CHIP_CORNER)
+	corner.Parent = chip
+
+	-- Black HUD icon (like weapon HUD). Provide your image later via iconImages[].
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.BackgroundTransparency = 1
+	icon.Size = UDim2.new(0.7, 0, 0.7, 0)
+	icon.AnchorPoint = Vector2.new(0.5, 0.5)
+	icon.Position = UDim2.new(0.5, 0, 0.45, 0)
+	icon.Image = iconImages[name] or ""
+	icon.ImageColor3 = Color3.fromRGB(0, 0, 0) -- black HUD icon
+	icon.ZIndex = 2
+	icon.Parent = chip
+
+	-- Hotkey badge (top-left), same style as Weapon HUD.
+	local key = mkKeyBadge(chip, cooldownConfigs[name].KeyBind)
+
+	-- Dark overlay (used to "gray out" on cooldown).
+	local overlay = Instance.new("Frame")
+	overlay.Name = "Overlay"
+	overlay.Size = UDim2.new(1, 0, 1, 0)
+	overlay.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+	overlay.BackgroundTransparency = 0.6
+	overlay.Visible = false
+	overlay.BorderSizePixel = 0
+	overlay.ZIndex = 3
+	overlay.Parent = chip
+	local oCorner = Instance.new("UICorner")
+	oCorner.CornerRadius = UDim.new(0, CHIP_CORNER)
+	oCorner.Parent = overlay
+
+	-- Small cooldown number under chip.
+	local cd = Instance.new("TextLabel")
+	cd.Name = "CooldownText"
+	cd.BackgroundTransparency = 1
+	cd.Size = UDim2.new(1, 0, 0, 14)
+	cd.Position = UDim2.new(0, 0, 1, 2)
+	cd.Text = ""
+	cd.TextColor3 = Color3.fromRGB(200, 200, 200)
+	cd.TextSize = 10
+	cd.Font = Enum.Font.Gotham
+	cd.TextStrokeTransparency = 0.7
+	cd.Visible = false
+	cd.ZIndex = 3
+	cd.Parent = chip
+
+	-- A tiny white square that blinks once when the ability becomes ready.
+	local blink = mkBlink(chip)
+
+	return {
+		Chip = chip,
+		Icon = icon,
+		KeyBadge = key,
+		Overlay = overlay,
+		CooldownText = cd,
+		Blink = blink,
+	}
+end
+
+-- === Build chips in fixed order ============================
+local indicators = {}
+for i, name in ipairs(order) do
+	indicators[name] = createChip(name, i) -- 1..N left->right, container is right-aligned
+end
+
+-- === Cooldown runtime ======================================
+local cooldownTimers = { Deflect = 0, Grapple = 0, Dodge = 0 }
+local justOffCooldown = { Deflect = false, Grapple = false, Dodge = false }
+
+local function use(name)
+	if cooldownTimers[name] <= 0 then
+		cooldownTimers[name] = cooldownConfigs[name].Cooldown
+	end
+end
+
+-- Simple input hooks (placeholder until wired to actual ability events)
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.Q then use("Deflect") end
+	if input.KeyCode == Enum.KeyCode.E then use("Grapple") end
+	if input.KeyCode == Enum.KeyCode.V then use("Dodge") end
+end)
+
+local function flashReady(ui)
+	-- one quick blink of a small white square
+	ui.Blink.Visible = true
+	task.wait(0.11)
+	ui.Blink.Visible = false
+end
+
+local function setCooldownVisual(ui, pct, active)
+	if active then
+		-- Gray out: dim overlay + lighten icon from black to gray + dim key badge
+		ui.Overlay.Visible = true
+		ui.Overlay.BackgroundTransparency = 0.45 + 0.35 * (1 - pct) -- stronger dim early, fades as it nears ready
+		ui.Icon.ImageColor3 = Color3.fromRGB(90, 90, 90)
+		ui.KeyBadge.TextTransparency = 0.45
+		ui.CooldownText.Visible = true
+	else
+		-- Ready: full black icon, no overlay
+		ui.Overlay.Visible = false
+		ui.Icon.ImageColor3 = Color3.fromRGB(0, 0, 0)
+		ui.KeyBadge.TextTransparency = 0
+		ui.CooldownText.Visible = false
+	end
+end
+
+local function update(dt)
+	for _, name in ipairs(order) do
+		local t = cooldownTimers[name]
+		local ui = indicators[name]
+
+		if t > 0 then
+			t = math.max(0, t - dt)
+			cooldownTimers[name] = t
+			local pct = t / cooldownConfigs[name].Cooldown
+			setCooldownVisual(ui, pct, true)
+			ui.CooldownText.Text = string.format("%.1f", t)
+			justOffCooldown[name] = true
+		else
+			if justOffCooldown[name] then
+				justOffCooldown[name] = false
+				-- Blink once when becoming ready
+				task.spawn(flashReady, ui)
+			end
+			setCooldownVisual(ui, 0, false)
+		end
+	end
+end
+
+RunService.RenderStepped:Connect(update)
+
+-- Reset on respawn
+player.CharacterAdded:Connect(function()
+	for k in pairs(cooldownTimers) do
+		cooldownTimers[k] = 0
+		justOffCooldown[k] = false
+	end
+end)
+
+
+-- LocalScript: StarterGui>ScreenGui>KillfeedFrame>Killfeed
+-- Killfeed.lua [LocalScript]
+-- Displays elimination feed in top right corner
+-- Place in StarterGui > ScreenGui > KillfeedFrame
+
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+
+-- GUI References
+local screenGui = script.Parent.Parent -- ScreenGui
+screenGui.IgnoreGuiInset = true
+
+local killfeedFrame = script.Parent -- KillfeedFrame
+killfeedFrame.Size = UDim2.new(1, 0, 1, 0)
+killfeedFrame.BackgroundTransparency = 1
+
+-- Killfeed configuration
+local MAX_ENTRIES = 5
+local ENTRY_DISPLAY_TIME = 5 -- seconds
+local ENTRY_HEIGHT = 30
+local ENTRY_SPACING = 5
+
+-- Create killfeed container
+local killfeedContainer = killfeedFrame:FindFirstChild("KillfeedContainer")
+if not killfeedContainer then
+	killfeedContainer = Instance.new("Frame")
+	killfeedContainer.Name = "KillfeedContainer"
+	killfeedContainer.Size = UDim2.new(0, 360, 0, (ENTRY_HEIGHT + ENTRY_SPACING) * MAX_ENTRIES)
+	killfeedContainer.Position = UDim2.new(1, -20, 0, 20) -- Top right
+	killfeedContainer.AnchorPoint = Vector2.new(1, 0)
+	killfeedContainer.BackgroundTransparency = 1
+	killfeedContainer.ClipsDescendants = true
+	killfeedContainer.Parent = killfeedFrame
+end
+
+-- Active killfeed entries
+local activeEntries = {}
+
+-- Create a killfeed entry
+local function createKillfeedEntry(killerName, victimName, weaponIcon, killType)
+	-- Entry container
+	local entry = Instance.new("Frame")
+	entry.Name = "KillfeedEntry"
+	entry.Size = UDim2.new(1, 0, 0, ENTRY_HEIGHT)
+	entry.Position = UDim2.new(0, 0, 0, 0)
+	entry.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+	entry.BackgroundTransparency = 0.3
+	entry.BorderSizePixel = 0
+	entry.Parent = killfeedContainer
+
+	local entryCorner = Instance.new("UICorner")
+	entryCorner.CornerRadius = UDim.new(0, 6)
+	entryCorner.Parent = entry
+
+	-- Killer name
+	local killerLabel = Instance.new("TextLabel")
+	killerLabel.Name = "KillerLabel"
+	killerLabel.Size = UDim2.new(0.4, -5, 1, 0)
+	killerLabel.Position = UDim2.new(0, 5, 0, 0)
+	killerLabel.BackgroundTransparency = 1
+	killerLabel.Text = killerName
+	killerLabel.TextColor3 = Color3.fromRGB(255, 100, 100) -- Red for killer
+	killerLabel.TextSize = 12
+	killerLabel.Font = Enum.Font.GothamBold
+	killerLabel.TextXAlignment = Enum.TextXAlignment.Right
+	killerLabel.TextStrokeTransparency = 0.5
+	killerLabel.Parent = entry
+
+	-- Special kill type indicator (DOMINATING!, REVENGE!, etc.)
+	if killType then
+		local killTypeLabel = Instance.new("TextLabel")
+		killTypeLabel.Name = "KillTypeLabel"
+		killTypeLabel.Size = UDim2.new(0.4, 0, 1, 0)
+		killTypeLabel.Position = UDim2.new(0.3, 0, 0, 0)
+		killTypeLabel.BackgroundTransparency = 1
+		killTypeLabel.Text = killType
+		killTypeLabel.TextColor3 = Color3.fromRGB(255, 200, 50) -- Gold
+		killTypeLabel.TextSize = 14
+		killTypeLabel.Font = Enum.Font.GothamBold
+		killTypeLabel.TextStrokeTransparency = 0.3
+		killTypeLabel.Parent = entry
+	else
+		-- Weapon icon/arrow
+		local weaponLabel = Instance.new("TextLabel")
+		weaponLabel.Name = "WeaponLabel"
+		weaponLabel.Size = UDim2.new(0, 40, 1, 0)
+		weaponLabel.Position = UDim2.new(0.5, -20, 0, 0)
+		weaponLabel.BackgroundTransparency = 1
+		weaponLabel.Text = "→" -- Arrow (will be weapon icon later)
+		weaponLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+		weaponLabel.TextSize = 16
+		weaponLabel.Font = Enum.Font.GothamBold
+		weaponLabel.Parent = entry
+	end
+
+	-- Victim name
+	local victimLabel = Instance.new("TextLabel")
+	victimLabel.Name = "VictimLabel"
+	victimLabel.Size = UDim2.new(0.4, -5, 1, 0)
+	victimLabel.Position = UDim2.new(0.6, 0, 0, 0)
+	victimLabel.BackgroundTransparency = 1
+	victimLabel.Text = victimName
+	victimLabel.TextColor3 = Color3.fromRGB(200, 200, 200) -- White for victim
+	victimLabel.TextSize = 12
+	victimLabel.Font = Enum.Font.Gotham
+	victimLabel.TextXAlignment = Enum.TextXAlignment.Left
+	victimLabel.TextStrokeTransparency = 0.5
+	victimLabel.Parent = entry
+
+	return entry
+end
+
+-- Add entry to killfeed
+local function addKillfeedEntry(killerName, victimName, weaponIcon, killType)
+	-- Remove oldest entry if at max
+	if #activeEntries >= MAX_ENTRIES then
+		local oldestEntry = table.remove(activeEntries, 1)
+		oldestEntry:Destroy()
+	end
+
+	-- Create new entry
+	local newEntry = createKillfeedEntry(killerName, victimName, weaponIcon, killType)
+	table.insert(activeEntries, newEntry)
+
+	-- Reposition all entries
+	for i, entry in ipairs(activeEntries) do
+		local targetPosition = UDim2.new(0, 0, 0, (i - 1) * (ENTRY_HEIGHT + ENTRY_SPACING))
+
+		local tween = TweenService:Create(
+			entry,
+			TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+			{Position = targetPosition}
+		)
+		tween:Play()
+	end
+
+	-- Fade out after display time
+	task.delay(ENTRY_DISPLAY_TIME, function()
+		if newEntry and newEntry.Parent then
+			local fadeTween = TweenService:Create(
+				newEntry,
+				TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{BackgroundTransparency = 1}
+			)
+			fadeTween:Play()
+
+			-- Fade all text elements
+			for _, child in ipairs(newEntry:GetChildren()) do
+				if child:IsA("TextLabel") then
+					local textFade = TweenService:Create(
+						child,
+						TweenInfo.new(0.5),
+						{TextTransparency = 1, TextStrokeTransparency = 1}
+					)
+					textFade:Play()
+				end
+			end
+
+			task.wait(0.5)
+
+			-- Remove from active entries
+			for i, entry in ipairs(activeEntries) do
+				if entry == newEntry then
+					table.remove(activeEntries, i)
+					break
+				end
+			end
+
+			newEntry:Destroy()
+		end
+	end)
+end
+
+-- Listen for kill events (placeholder - will connect to combat system)
+-- This would normally be triggered by a RemoteEvent from the server
+local function onPlayerKilled(killerName, victimName, weaponIcon, killType)
+	addKillfeedEntry(killerName, victimName, weaponIcon, killType)
+end
+
+print("Killfeed initialized for:", player.Name)
+print("Note: Killfeed events are placeholder - will integrate with combat system later")
+
+-- Export function for other scripts to call
+return {
+	AddKill = onPlayerKilled
+ }
+
+-- ModuleScript: ReplicatedStorage>GameConfig
+-- GameConfig.lua
+-- Centralized configuration for the entire RPG game
+-- Place in ReplicatedStorage
+
+local GameConfig = {}
+
+-- ========================================
+-- PLAYER SETTINGS
+-- ========================================
+GameConfig.Player = {
+	-- Base Stats
+	MaxHealth = 100,
+	MaxStamina = 100,
+
+	-- Movement
+	WalkSpeed = 16,
+	SprintSpeed = 24,
+	JumpPower = 50,
+
+	-- Stamina Costs (per second or per action)
+	SprintStaminaCost = 10, -- per second
+	EvadeStaminaCost = 25,  -- per dodge roll
+	GrappleStaminaCost = 50, -- per grapple
+
+	-- Stamina Regeneration
+	StaminaRegenDelay = 5, -- seconds after last action
+	StaminaRegenRate = 20, -- per second
+
+	-- Wall Stick Settings
+	WallStickDuration = 30, -- seconds
+	WallStickStaminaDrain = 5, -- per second
+}
+
+-- ========================================
+-- COMBAT SETTINGS
+-- ========================================
+GameConfig.Combat = {
+	-- Base Attack Costs
+	LightAttackStamina = 12,
+	HeavyAttackStamina = 25,
+
+	-- Combo Settings
+	MaxComboHits = 3,
+	ComboWindowTime = 1.5, -- seconds to continue combo
+
+	-- Deflect Settings
+	DeflectWindow = 0.3, -- seconds (timing window)
+	DeflectStaminaCost = 15,
+
+	-- Damage Settings
+	BaseKOShieldModifier = 1.0, -- Multiplier for damage calculation
+
+	-- Stagger/Hitstun
+	LightAttackStun = 0.3, -- seconds
+	HeavyAttackStun = 0.6, -- seconds
+}
+
+-- ========================================
+-- GRAPPLE SETTINGS
+-- ========================================
+GameConfig.Grapple = {
+	-- Default Stats (can be overridden by weapons)
+	DefaultAnchorSpeed = 100, -- studs per second
+	DefaultZipSpeed = 80,
+	DefaultAnchorDistance = 100, -- studs
+
+	-- Cooldowns
+	GrappleCooldown = 3, -- seconds
+
+	-- Wall Stick
+	WallStickEnabled = true,
+	WallDetectionRange = 5, -- studs
+}
+
+-- ========================================
+-- WEAPON SYSTEM
+-- ========================================
+GameConfig.Weapons = {
+	-- Tier Progression
+	MaxTiers = 3,
+	TierUnlockThresholds = {
+		[1] = 0,    -- Tier 1: Passive (no cost, starts unlocked in match)
+		[2] = 100,  -- Tier 2: Ability (requires 100 Sol Dust in match)
+		[3] = 250,  -- Tier 3: Ultimate (requires 250 Sol Dust in match)
+	},
+
+	-- Sol Dust Earning
+	SolDustPerHit = 5,
+	SolDustPerKill = 20,
+	SolDustDominationBonus = 10,
+	SolDustRevengeBonus = 15,
+
+	-- Animation Phase System
+	DefaultPhaseBlendTime = 0.1,
+
+	-- Attributes
+	Attributes = {
+		Strength = "Strength",
+		Agility = "Agility",
+		Intelligence = "Intelligence"
+	}
+}
+
+-- ========================================
+-- PVP SETTINGS
+-- ========================================
+GameConfig.PVP = {
+	-- Arena Settings
+	MaxPlayersPerArena = 16,
+	RespawnTime = 3, -- seconds
+
+	-- Domination System
+	DominationKillThreshold = 3, -- kills on same player
+
+	-- Killfeed
+	KillfeedDisplayTime = 5, -- seconds
+	MaxKillfeedEntries = 5,
+}
+
+-- ========================================
+-- UI SETTINGS
+-- ========================================
+GameConfig.UI = {
+	-- Stamina Bar Colors
+	StaminaColorHigh = Color3.fromRGB(0, 255, 0), -- Green
+	StaminaColorMid = Color3.fromRGB(255, 255, 0), -- Yellow
+	StaminaColorLow = Color3.fromRGB(255, 0, 0),   -- Red
+
+	-- Tier Bar
+	TierBarFillSpeed = 0.5, -- seconds to animate fill
+
+	-- Attribute Colors
+	AttributeColors = {
+		Strength = Color3.fromRGB(255, 50, 50),     -- Red
+		Agility = Color3.fromRGB(50, 255, 50),      -- Green
+		Intelligence = Color3.fromRGB(50, 150, 255) -- Blue
+	},
+}
+
+-- ========================================
+-- CAMERA SETTINGS
+-- ========================================
+GameConfig.Camera = {
+	-- Distance
+	MinDistance = 8,
+	MaxDistance = 20,
+	DefaultDistance = 12,
+	ZoomSpeed = 2,
+
+	-- Rotation
+	MinPitch = -80,
+	MaxPitch = 80,
+	MouseSensitivity = 0.3,
+
+	-- Smoothing
+	Smoothness = 0.15,
+
+	-- Offset (Over-the-shoulder style)
+	OffsetY = 2,  -- Height above character
+	OffsetX = 4,  -- Horizontal offset (negative = left shoulder, positive = right shoulder)
+	OffsetZ = 0,  -- Forward/backward offset
+}
+
+-- ========================================
+-- ANIMATION IDS (Replace with your actual IDs)
+-- ========================================
+GameConfig.Animations = {
+	-- Universal Animations
+	Idle = nil, -- "rbxassetid://YOUR_ID"
+	Walk = nil,
+	Run = nil,
+	Sprint = nil,
+	Jump = nil,
+	Fall = nil,
+	Land = nil,
+
+	-- Combat Animations
+	LightAttack1 = nil,
+	LightAttack2 = nil,
+	LightAttack3 = nil,
+	HeavyAttack = nil,
+	Deflect = nil,
+	DodgeRoll = nil,
+	HitReaction = nil,
+	KO = nil,
+
+	-- Grapple Animations
+	GrappleThrow = nil,
+	GrappleZip = nil,
+	WallStick = nil,
+
+	-- Entry
+	SpawnEntry = nil,
+}
+
+-- ========================================
+-- AUDIO IDS (Replace with your actual IDs)
+-- ========================================
+GameConfig.Audio = {
+	-- UI Sounds
+	ButtonClick = nil,
+	MenuOpen = nil,
+
+	-- Combat Sounds
+	LightAttackWhoosh = nil,
+	HeavyAttackWhoosh = nil,
+	HitImpact = nil,
+	Deflect = nil,
+
+	-- Abilities (weapon-specific sounds will be in weapon data)
+	AbilityActivate = nil,
+	UltimateActivate = nil,
+}
+
+-- ========================================
+-- UTILITY FUNCTIONS
+-- ========================================
+
+-- Get stamina color based on percentage
+function GameConfig.GetStaminaColor(percentage)
+	if percentage > 0.6 then
+		return GameConfig.UI.StaminaColorHigh
+	elseif percentage > 0.3 then
+		return GameConfig.UI.StaminaColorMid
+	else
+		return GameConfig.UI.StaminaColorLow
+	end
+end
+
+-- Get attribute color
+function GameConfig.GetAttributeColor(attributeName)
+	return GameConfig.UI.AttributeColors[attributeName] or Color3.new(1, 1, 1)
+end
+
+-- Calculate damage (basic formula from your design doc)
+function GameConfig.CalculateDamage(baseDamage, koShieldModifier)
+	koShieldModifier = koShieldModifier or GameConfig.Combat.BaseKOShieldModifier
+	return baseDamage * koShieldModifier
+end
+
+return GameConfig
+
+-- ModuleScript: ReplicatedStorage>WeaponData
+-- WeaponData.lua [ModuleScript]
+-- Centralized weapon data system
+-- Place in ReplicatedStorage
+
+local WeaponData = {}
+
+-- ========================================
+-- TEMPLATE WEAPON: "Starter Fists"
+-- This is the template showing all systems
+-- ========================================
+
+WeaponData.StarterFists = {
+	-- Basic Info
+	Name = "Starter Fists",
+	Description = "Basic unarmed combat. Template for all weapons.",
+	Attribute = "Universal", -- Strength/Agility/Intelligence/Universal
+
+	-- Visuals
+	ModelId = nil, -- Tool model (nil = uses default R15 fists)
+	IconId = "rbxassetid://0", -- Inventory icon (placeholder)
+	CoreVFX = "rbxassetid://0", -- Weapon core particle effect (placeholder)
+
+	-- Combat Stats
+	Damage = {
+		LightAttack1 = 8,
+		LightAttack2 = 10,
+		LightAttack3 = 15, -- Finisher does more
+		HeavyAttack = 25,
+	},
+
+	-- Stamina Costs
+	StaminaCosts = {
+		LightAttack = 12,
+		HeavyAttack = 25,
+	},
+
+	-- Attack Speed (seconds per phase)
+	AttackSpeed = {
+		LightAttack1 = 0.4, -- Fast jab
+		LightAttack2 = 0.4, -- Fast jab
+		LightAttack3 = 0.6, -- Slower finisher
+		HeavyAttack = 0.8,  -- Slow windup
+	},
+
+	-- Combo System
+	ComboWindow = 1.5, -- Seconds to continue combo
+	MaxComboHits = 3,
+
+	-- Movement Stats
+	Dodge = {
+		Distance = 15,
+		Duration = 0.4,
+		IFrames = 0.2, -- Invincibility frames
+	},
+
+	Grapple = {
+		AnchorSpeed = 100,
+		ZipSpeed = 80,
+		AnchorDistance = 100,
+	},
+
+	Deflect = {
+		Window = 0.3, -- Timing window in seconds
+		StaminaCost = 15,
+	},
+
+	-- ========================================
+	-- ANIMATION IDs (Placeholders)
+	-- ========================================
+	Animations = {
+		-- Idle/Movement
+		Idle = "rbxassetid://0",
+		Walk = "rbxassetid://0",
+		Run = "rbxassetid://0",
+
+		-- Light Attacks
+		LightAttack1 = "rbxassetid://0", -- Left jab
+		LightAttack2 = "rbxassetid://0", -- Right jab
+		LightAttack3 = "rbxassetid://0", -- Uppercut finisher
+
+		-- Heavy Attack
+		HeavyAttack = "rbxassetid://0", -- Strong punch
+
+		-- Dodge (per weapon - can be different)
+		DodgeRollForward = "rbxassetid://0",
+		DodgeRollBackward = "rbxassetid://0",
+		DodgeRollLeft = "rbxassetid://0",
+		DodgeRollRight = "rbxassetid://0",
+
+		-- Deflect
+		Deflect = "rbxassetid://0",
+
+		-- Abilities (Tier system)
+		PassiveActivate = "rbxassetid://0",
+		AbilityActivate = "rbxassetid://0",
+		UltimateActivate = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- VFX (Visual Effects) - Asset IDs
+	-- ========================================
+	VFX = {
+		-- Pre-Attack (wind-up/telegraph)
+		PreAttack1 = "rbxassetid://0", -- Light attack 1 windup
+		PreAttack2 = "rbxassetid://0", -- Light attack 2 windup
+		PreAttack3 = "rbxassetid://0", -- Light attack 3 windup
+		PreHeavy = "rbxassetid://0",   -- Heavy attack windup
+
+		-- On Hit (impact effects)
+		OnHit1 = "rbxassetid://0", -- Light hit 1
+		OnHit2 = "rbxassetid://0", -- Light hit 2
+		OnHit3 = "rbxassetid://0", -- Light hit 3 (finisher)
+		OnHitHeavy = "rbxassetid://0", -- Heavy hit
+
+		-- On KO (elimination effects)
+		OnKO = "rbxassetid://0", -- Special effect when this weapon KOs someone
+
+		-- Abilities
+		PassiveVFX = "rbxassetid://0",
+		AbilityVFX = "rbxassetid://0",
+		UltimateVFX = "rbxassetid://0",
+
+		-- Trail (weapon trail during swings)
+		Trail = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- SFX (Sound Effects) - Asset IDs
+	-- ========================================
+	SFX = {
+		-- Attack Sounds (whooshes)
+		LightAttackWhoosh1 = "rbxassetid://0",
+		LightAttackWhoosh2 = "rbxassetid://0",
+		LightAttackWhoosh3 = "rbxassetid://0",
+		HeavyAttackWhoosh = "rbxassetid://0",
+
+		-- Impact Sounds
+		HitImpact1 = "rbxassetid://0",
+		HitImpact2 = "rbxassetid://0",
+		HitImpact3 = "rbxassetid://0",
+		HitImpactHeavy = "rbxassetid://0",
+
+		-- Elimination Sound
+		KOSound = "rbxassetid://0",
+
+		-- Movement Sounds (per weapon)
+		Walking1 = "rbxassetid://0", -- Randomly selected
+		Walking2 = "rbxassetid://0",
+		Walking3 = "rbxassetid://0",
+		Sprinting1 = "rbxassetid://0",
+		Sprinting2 = "rbxassetid://0",
+		Sprinting3 = "rbxassetid://0",
+
+		-- Equipment Sounds (equip/unequip)
+		Equipment1 = "rbxassetid://0", -- Randomly selected and reused
+		Equipment2 = "rbxassetid://0",
+		Equipment3 = "rbxassetid://0",
+
+		-- Abilities
+		PassiveSFX = "rbxassetid://0",
+		AbilitySFX = "rbxassetid://0",
+		UltimateSFX = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- TIER SYSTEM (Passive/Ability/Ultimate)
+	-- ========================================
+
+	-- TIER 1: Passive (Always active once unlocked with 0 Sol Dust)
+	Passive = {
+		Name = "Fighter's Spirit",
+		Description = "Gain 5% movement speed after landing 3 consecutive hits",
+		Icon = "rbxassetid://0",
+		Cooldown = 0, -- Passive = no cooldown
+
+		-- Function called when passive triggers
+		-- This is just metadata - actual implementation in CombatController
+		Effect = {
+			Type = "SpeedBoost",
+			Value = 0.05, -- 5% speed increase
+			Duration = 5, -- seconds
+			Trigger = "3HitCombo",
+		}
+	},
+
+	-- TIER 2: Ability (Unlocked at 100 Sol Dust in match)
+	Ability = {
+		Name = "Power Strike",
+		Description = "Next heavy attack deals 50% more damage",
+		Icon = "rbxassetid://0",
+		Cooldown = 8, -- seconds
+		StaminaCost = 20,
+
+		Effect = {
+			Type = "DamageBoost",
+			Value = 0.5, -- 50% damage increase
+			Duration = 5, -- Window to use boosted attack
+			AppliesTo = "NextHeavyAttack",
+		}
+	},
+
+	-- TIER 3: Ultimate (Unlocked at 250 Sol Dust in match)
+	Ultimate = {
+		Name = "Berserker Rage",
+		Description = "Gain 30% attack speed and damage for 8 seconds",
+		Icon = "rbxassetid://0",
+		Cooldown = 30, -- seconds
+		StaminaCost = 50,
+
+		Effect = {
+			Type = "MultiBoost",
+			AttackSpeedBoost = 0.3, -- 30% faster
+			DamageBoost = 0.3, -- 30% more damage
+			Duration = 8, -- seconds
+		}
+	},
+}
+
+-- Helper function to get weapon data
+function WeaponData.GetWeapon(weaponName)
+	return WeaponData[weaponName]
+end
+
+-- Helper function to get all weapons (for future weapon selection)
+function WeaponData.GetAllWeapons()
+	local weapons = {}
+	for name, data in pairs(WeaponData) do
+		if type(data) == "table" and data.Name then
+			table.insert(weapons, data)
+		end
+	end
+	return weapons
+end
+
+-- ========================================
+-- SECONDARY WEAPON: "Firecracker"
+-- Fast, low damage, high mobility
+-- ========================================
+
+WeaponData.Firecracker = {
+	-- Basic Info
+	Name = "Firecracker",
+	Description = "Quick explosive punches. Low damage, fast attacks.",
+	Attribute = "Agility", -- Fast, mobile weapon
+
+	-- Visuals
+	ModelId = nil, -- Tool model (nil = uses default fists with particles)
+	IconId = "rbxassetid://0", -- Inventory icon (placeholder)
+	CoreVFX = "rbxassetid://0", -- Orange/red sparks
+
+	-- Combat Stats (Lower damage, faster attacks)
+	Damage = {
+		LightAttack1 = 5,  -- Lower than Starter Fists
+		LightAttack2 = 6,
+		LightAttack3 = 10, -- Quick finisher
+		HeavyAttack = 18,  -- Lower than Starter Fists
+	},
+
+	-- Stamina Costs (Cheaper attacks for spam)
+	StaminaCosts = {
+		LightAttack = 8,  -- Less than Starter Fists (12)
+		HeavyAttack = 18, -- Less than Starter Fists (25)
+	},
+
+	-- Attack Speed (FASTER than Starter Fists)
+	AttackSpeed = {
+		LightAttack1 = 0.3, -- Faster than Starter Fists (0.4)
+		LightAttack2 = 0.3,
+		LightAttack3 = 0.4, -- Faster finisher (vs 0.6)
+		HeavyAttack = 0.6,  -- Faster heavy (vs 0.8)
+	},
+
+	-- Combo System
+	ComboWindow = 2.0, -- Longer window (easier to combo)
+	MaxComboHits = 3,
+
+	-- Movement Stats (Higher mobility)
+	Dodge = {
+		Distance = 18,  -- Farther than Starter Fists (15)
+		Duration = 0.35, -- Slightly faster (vs 0.4)
+		IFrames = 0.25, -- Longer invincibility (vs 0.2)
+	},
+
+	Grapple = {
+		AnchorSpeed = 120, -- Faster than Starter Fists (100)
+		ZipSpeed = 100,    -- Faster than Starter Fists (80)
+		AnchorDistance = 110, -- Slightly farther (vs 100)
+	},
+
+	Deflect = {
+		Window = 0.35, -- Slightly easier timing (vs 0.3)
+		StaminaCost = 12, -- Cheaper (vs 15)
+	},
+
+	-- ========================================
+	-- ANIMATION IDs (Placeholders)
+	-- ========================================
+	Animations = {
+		-- Idle/Movement (same as fists for now)
+		Idle = "rbxassetid://0",
+		Walk = "rbxassetid://0",
+		Run = "rbxassetid://0",
+
+		-- Light Attacks (faster, snappier animations)
+		LightAttack1 = "rbxassetid://0", -- Quick jab
+		LightAttack2 = "rbxassetid://0", -- Quick cross
+		LightAttack3 = "rbxassetid://0", -- Spin kick finisher
+
+		-- Heavy Attack
+		HeavyAttack = "rbxassetid://0", -- Explosive punch
+
+		-- Dodge (per weapon)
+		DodgeRollForward = "rbxassetid://0",
+		DodgeRollBackward = "rbxassetid://0",
+		DodgeRollLeft = "rbxassetid://0",
+		DodgeRollRight = "rbxassetid://0",
+
+		-- Deflect
+		Deflect = "rbxassetid://0",
+
+		-- Abilities
+		PassiveActivate = "rbxassetid://0",
+		AbilityActivate = "rbxassetid://0",
+		UltimateActivate = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- VFX (Visual Effects) - Orange/Red Sparks
+	-- ========================================
+	VFX = {
+		-- Pre-Attack (orange sparks building up)
+		PreAttack1 = "rbxassetid://0",
+		PreAttack2 = "rbxassetid://0",
+		PreAttack3 = "rbxassetid://0",
+		PreHeavy = "rbxassetid://0",
+
+		-- On Hit (small explosions)
+		OnHit1 = "rbxassetid://0",
+		OnHit2 = "rbxassetid://0",
+		OnHit3 = "rbxassetid://0",
+		OnHitHeavy = "rbxassetid://0",
+
+		-- On KO (bigger explosion)
+		OnKO = "rbxassetid://0",
+
+		-- Abilities
+		PassiveVFX = "rbxassetid://0",
+		AbilityVFX = "rbxassetid://0",
+		UltimateVFX = "rbxassetid://0",
+
+		-- Trail (orange/red spark trail)
+		Trail = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- SFX (Sound Effects) - Crackling sounds
+	-- ========================================
+	SFX = {
+		-- Attack Sounds (crackling whooshes)
+		LightAttackWhoosh1 = "rbxassetid://0",
+		LightAttackWhoosh2 = "rbxassetid://0",
+		LightAttackWhoosh3 = "rbxassetid://0",
+		HeavyAttackWhoosh = "rbxassetid://0",
+
+		-- Impact Sounds (small pops)
+		HitImpact1 = "rbxassetid://0",
+		HitImpact2 = "rbxassetid://0",
+		HitImpact3 = "rbxassetid://0",
+		HitImpactHeavy = "rbxassetid://0",
+
+		-- Elimination Sound (big boom)
+		KOSound = "rbxassetid://0",
+
+		-- Movement Sounds (lighter footsteps)
+		Walking1 = "rbxassetid://0",
+		Walking2 = "rbxassetid://0",
+		Walking3 = "rbxassetid://0",
+		Sprinting1 = "rbxassetid://0",
+		Sprinting2 = "rbxassetid://0",
+		Sprinting3 = "rbxassetid://0",
+
+		-- Equipment Sounds (crackling)
+		Equipment1 = "rbxassetid://0",
+		Equipment2 = "rbxassetid://0",
+		Equipment3 = "rbxassetid://0",
+
+		-- Abilities
+		PassiveSFX = "rbxassetid://0",
+		AbilitySFX = "rbxassetid://0",
+		UltimateSFX = "rbxassetid://0",
+	},
+
+	-- ========================================
+	-- TIER SYSTEM (Passive/Ability/Ultimate)
+	-- ========================================
+
+	-- TIER 1: Passive
+	Passive = {
+		Name = "Spark Step",
+		Description = "Every 5th hit creates a small explosion, damaging nearby enemies",
+		Icon = "rbxassetid://0",
+		Cooldown = 0,
+
+		Effect = {
+			Type = "AOEOnHit",
+			Trigger = "Every5Hits",
+			AOEDamage = 5,
+			AOERadius = 5,
+		}
+	},
+
+	-- TIER 2: Ability
+	Ability = {
+		Name = "Firecracker Dash",
+		Description = "Dash forward with explosive speed, leaving fire trail",
+		Icon = "rbxassetid://0",
+		Cooldown = 6, -- Shorter cooldown (vs 8)
+		StaminaCost = 15,
+
+		Effect = {
+			Type = "Dash",
+			Distance = 20,
+			Speed = 100,
+			TrailDamage = 3,
+			TrailDuration = 2,
+		}
+	},
+
+	-- TIER 3: Ultimate
+	Ultimate = {
+		Name = "Firecracker Frenzy",
+		Description = "Rapid-fire punches, each creating small explosions",
+		Icon = "rbxassetid://0",
+		Cooldown = 25, -- Shorter cooldown (vs 30)
+		StaminaCost = 40,
+
+		Effect = {
+			Type = "RapidAttack",
+			Duration = 5,
+			AttackSpeedBoost = 0.5, -- 50% faster
+			AOEPerHit = true,
+			AOEDamage = 5,
+			AOERadius = 3,
+		}
+	},
+}
+
+return WeaponData
+
+-- Script: ServerScriptService>CombatServer
+-- CombatServer.lua [Script]
+-- Server-side combat validation and damage application
+-- Place in ServerScriptService
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+-- Create RemoteEvents folder if it doesn't exist
+local RemoteEvents = ReplicatedStorage:FindFirstChild("RemoteEvents")
+if not RemoteEvents then
+	RemoteEvents = Instance.new("Folder")
+	RemoteEvents.Name = "RemoteEvents"
+	RemoteEvents.Parent = ReplicatedStorage
+end
+
+-- Create remote events
+local AttackEvent = RemoteEvents:FindFirstChild("AttackEvent")
+if not AttackEvent then
+	AttackEvent = Instance.new("RemoteEvent")
+	AttackEvent.Name = "AttackEvent"
+	AttackEvent.Parent = RemoteEvents
+end
+
+local HitEvent = RemoteEvents:FindFirstChild("HitEvent")
+if not HitEvent then
+	HitEvent = Instance.new("RemoteEvent")
+	HitEvent.Name = "HitEvent"
+	HitEvent.Parent = RemoteEvents
+end
+
+-- Create NPC hit event (for damaging workspace NPCs/dummies)
+local NPCHitEvent = RemoteEvents:FindFirstChild("NPCHitEvent")
+if not NPCHitEvent then
+	NPCHitEvent = Instance.new("RemoteEvent")
+	NPCHitEvent.Name = "NPCHitEvent"
+	NPCHitEvent.Parent = RemoteEvents
+end
+
+-- Track player combat stats
+local playerStats = {}
+
+-- Initialize player stats
+local function initializePlayer(player)
+	playerStats[player] = {
+		LastAttackTime = 0,
+		AttackCount = 0,
+		SolDust = 0,
+		Kills = 0,
+		Deaths = 0,
+		DominatingPlayer = nil, -- Player they're dominating
+		DominationKills = 0, -- Kills on that player
+	}
+
+	-- Wait for character
+	player.CharacterAdded:Connect(function(character)
+		local humanoid = character:WaitForChild("Humanoid")
+
+		-- Create Sol Dust value
+		local solDustValue = character:FindFirstChild("SolDustValue")
+		if not solDustValue then
+			solDustValue = Instance.new("NumberValue")
+			solDustValue.Name = "SolDustValue"
+			solDustValue.Value = 0
+			solDustValue.Parent = character
+		end
+
+		-- Handle death
+		humanoid.Died:Connect(function()
+			playerStats[player].Deaths = playerStats[player].Deaths + 1
+			print(player.Name, "died. Total deaths:", playerStats[player].Deaths)
+
+			-- Reset Sol Dust on death (in-match progression resets)
+			solDustValue.Value = 0
+			playerStats[player].SolDust = 0
+		end)
+	end)
+end
+
+-- Award Sol Dust
+local function awardSolDust(player, amount, reason)
+	if not playerStats[player] then return end
+
+	local character = player.Character
+	if not character then return end
+
+	local solDustValue = character:FindFirstChild("SolDustValue")
+	if solDustValue then
+		solDustValue.Value = solDustValue.Value + amount
+		playerStats[player].SolDust = solDustValue.Value
+		print(player.Name, "earned", amount, "Sol Dust for", reason, "Total:", solDustValue.Value)
+	end
+end
+
+-- Handle attack event (for logging/anti-cheat)
+AttackEvent.OnServerEvent:Connect(function(player, attackType, comboCount)
+	if not playerStats[player] then return end
+
+	-- Basic anti-cheat: rate limiting
+	local currentTime = tick()
+	if currentTime - playerStats[player].LastAttackTime < 0.2 then
+		warn(player.Name, "attacking too fast! Possible exploit.")
+		return
+	end
+
+	playerStats[player].LastAttackTime = currentTime
+	playerStats[player].AttackCount = playerStats[player].AttackCount + 1
+
+	print(player.Name, "performed", attackType, "attack", comboCount)
+end)
+
+-- Handle hit event (apply damage)
+HitEvent.OnServerEvent:Connect(function(attacker, victim, damage, attackType, comboCount)
+	if not attacker or not victim then return end
+	if not playerStats[attacker] or not playerStats[victim] then return end
+
+	-- Validate players are in game
+	if not attacker.Character or not victim.Character then return end
+
+	local attackerRoot = attacker.Character:FindFirstChild("HumanoidRootPart")
+	local victimRoot = victim.Character:FindFirstChild("HumanoidRootPart")
+	local victimHumanoid = victim.Character:FindFirstChild("Humanoid")
+
+	if not attackerRoot or not victimRoot or not victimHumanoid then return end
+
+	-- Validate distance (anti-cheat)
+	local distance = (attackerRoot.Position - victimRoot.Position).Magnitude
+	local maxDistance = attackType == "Heavy" and 10 or 7
+
+	if distance > maxDistance then
+		warn(attacker.Name, "hit from too far away! Distance:", distance)
+		return
+	end
+
+	-- Apply damage
+	victimHumanoid:TakeDamage(damage)
+
+	-- Award Sol Dust for hit (5 per hit)
+	awardSolDust(attacker, 5, "hit")
+
+	print(attacker.Name, "hit", victim.Name, "for", damage, "damage!")
+
+	-- Check if victim died
+	if victimHumanoid.Health <= 0 then
+		-- Award Sol Dust for kill (20)
+		awardSolDust(attacker, 20, "elimination")
+
+		-- Track kills
+		playerStats[attacker].Kills = playerStats[attacker].Kills + 1
+
+		-- Check for domination
+		if playerStats[attacker].DominatingPlayer == victim then
+			playerStats[attacker].DominationKills = playerStats[attacker].DominationKills + 1
+
+			if playerStats[attacker].DominationKills >= 3 then
+				print(attacker.Name, "is DOMINATING", victim.Name, "!")
+				-- TODO: Trigger killfeed event for domination
+				awardSolDust(attacker, 10, "domination")
+			end
+		else
+			-- Start tracking domination
+			playerStats[attacker].DominatingPlayer = victim
+			playerStats[attacker].DominationKills = 1
+		end
+
+		print(attacker.Name, "eliminated", victim.Name, "! Total kills:", playerStats[attacker].Kills)
+	end
+end)
+
+-- Handle NPC hit event (for workspace dummies/NPCs)
+NPCHitEvent.OnServerEvent:Connect(function(attacker, npcCharacter, damage, attackType)
+	if not attacker or not npcCharacter then return end
+	if not playerStats[attacker] then return end
+	if not attacker.Character then return end
+
+	-- Validate NPC character
+	local npcHumanoid = npcCharacter:FindFirstChild("Humanoid")
+	local npcRoot = npcCharacter:FindFirstChild("HumanoidRootPart")
+	local attackerRoot = attacker.Character:FindFirstChild("HumanoidRootPart")
+
+	if not npcHumanoid or not npcRoot or not attackerRoot then return end
+
+	-- Validate distance (anti-cheat)
+	local distance = (attackerRoot.Position - npcRoot.Position).Magnitude
+	local maxDistance = attackType == "Heavy" and 10 or 7
+
+	if distance > maxDistance then
+		warn(attacker.Name, "hit NPC from too far away! Distance:", distance)
+		return
+	end
+
+	-- Apply damage to NPC
+	npcHumanoid:TakeDamage(damage)
+
+	-- Award Sol Dust for NPC hit (3 per hit, less than player)
+	awardSolDust(attacker, 3, "NPC hit")
+
+	print(attacker.Name, "hit NPC", npcCharacter.Name, "for", damage, "damage!")
+
+	-- Check if NPC died
+	if npcHumanoid.Health <= 0 then
+		-- Award Sol Dust for NPC kill (10, less than player kill)
+		awardSolDust(attacker, 10, "NPC elimination")
+		print(attacker.Name, "eliminated NPC", npcCharacter.Name, "!")
+	end
+end)
+
+-- Player join/leave handling
+Players.PlayerAdded:Connect(initializePlayer)
+
+Players.PlayerRemoving:Connect(function(player)
+	playerStats[player] = nil
+end)
+
+-- Initialize existing players
+for _, player in ipairs(Players:GetPlayers()) do
+	initializePlayer(player)
+end
+
+print("CombatServer initialized!")
+print("Combat system ready for PVP!")
+
+
+
+-- GUI STRUCTURE MAP (for AI debugging assistance)
+--[[
+{"Name":"StarterGui","ClassName":"StarterGui","Properties":[],"Children":[{"Name":"ScreenGui","ClassName":"ScreenGui","Properties":{"Enabled":true,"ZIndexBehavior":"Enum.ZIndexBehavior.Sibling","ResetOnSpawn":true,"IgnoreGuiInset":false,"DisplayOrder":0},"Children":[{"Name":"StaminaFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,0,0,0],"BorderColor3":[0,0,0],"Size":[1,0,1,0],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"StaminaGui","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]},{"Name":"VitalsFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,0,0,0],"BorderColor3":[0,0,0],"Size":[0,100,0,100],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"HPBar","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]},{"Name":"KOShields","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]},{"Name":"LoadoutFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,0,0,0],"BorderColor3":[0,0,0],"Size":[0,100,0,100],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"LoadoutDisplay","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]},{"Name":"TierBarFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,0,0,0],"BorderColor3":[0,0,0],"Size":[0,100,0,100],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"TierBar","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]},{"Name":"CooldownsFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,-90,0,50],"BorderColor3":[0,0,0],"Size":[0,100,0,100],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"ActionCooldowns","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]},{"Name":"KillfeedFrame","ClassName":"Frame","Properties":{"Visible":true,"AnchorPoint":[0,0],"BackgroundTransparency":1,"Position":[0,0,0,0],"BorderColor3":[0,0,0],"Size":[0,100,0,100],"BorderSizePixel":0,"BackgroundColor3":[1,1,1]},"Children":[{"Name":"Killfeed","ClassName":"LocalScript","Properties":[],"Children":[],"Attributes":[]}],"Attributes":[]}],"Attributes":[]}],"Attributes":[]}
+--]]
